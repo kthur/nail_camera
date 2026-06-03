@@ -75,6 +75,8 @@ fun CameraScanScreen(
     val coroutineScope = rememberCoroutineScope()
     val isMockMode by repository.isMockMode.collectAsStateWithLifecycle(initialValue = true)
     val apiKey by repository.apiKey.collectAsStateWithLifecycle(initialValue = "")
+    val useGemma by repository.useGemma.collectAsStateWithLifecycle(initialValue = false)
+    val gemmaModelPath by repository.gemmaModelPath.collectAsStateWithLifecycle(initialValue = "/data/local/tmp/gemma.bin")
 
     var hasCameraPermission by remember {
         mutableStateOf(
@@ -281,6 +283,9 @@ fun CameraScanScreen(
                                                 "healthy",
                                                 repository,
                                                 coroutineScope,
+                                                context,
+                                                useGemma,
+                                                gemmaModelPath,
                                                 onAnalysisComplete
                                             )
                                         } else {
@@ -299,11 +304,27 @@ fun CameraScanScreen(
                                                     coroutineScope.launch {
                                                         try {
                                                             val bitmap = BitmapFactory.decodeFile(file.absolutePath)
-                                                            val result = GeminiAnalyzer.analyzeNail(
-                                                                bitmap = bitmap,
-                                                                apiKey = apiKey,
-                                                                imagePath = file.absolutePath
-                                                            )
+                                                            val result = if (useGemma) {
+                                                                if (gemmaModelPath.isBlank()) {
+                                                                    throw Exception("Gemma 모델 경로가 설정되지 않았습니다. 설정에서 경로를 지정해 주세요.")
+                                                                }
+                                                                val detectedSymptoms = extractSymptomsFromBitmap(bitmap)
+                                                                com.example.nailnutri.analysis.GemmaAnalyzer.analyzeSymptoms(
+                                                                    context = context,
+                                                                    symptoms = detectedSymptoms,
+                                                                    modelPath = gemmaModelPath,
+                                                                    imagePath = file.absolutePath
+                                                                )
+                                                            } else {
+                                                                if (apiKey.isBlank()) {
+                                                                    throw Exception("Gemini API 키가 없습니다. 설정에서 키를 등록하거나 데모 모드를 활성화해주세요.")
+                                                                }
+                                                                GeminiAnalyzer.analyzeNail(
+                                                                    bitmap = bitmap,
+                                                                    apiKey = apiKey,
+                                                                    imagePath = file.absolutePath
+                                                                )
+                                                            }
                                                             repository.saveResult(result)
                                                             onAnalysisComplete(result.id)
                                                         } catch (e: Exception) {
@@ -353,6 +374,9 @@ fun CameraScanScreen(
                                         condition,
                                         repository,
                                         coroutineScope,
+                                        context,
+                                        useGemma,
+                                        gemmaModelPath,
                                         onAnalysisComplete
                                     )
                                 }
@@ -568,11 +592,39 @@ private fun triggerMockAnalysis(
     condition: String,
     repository: DataRepository,
     coroutineScope: CoroutineScope,
+    context: Context,
+    useGemma: Boolean,
+    gemmaModelPath: String,
     onAnalysisComplete: (String) -> Unit
 ) {
     coroutineScope.launch {
         val dateStr = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault()).format(Date())
         val mockId = UUID.randomUUID().toString()
+
+        // If Gemma mode is active and model path is configured, query the local Gemma model
+        if (useGemma && gemmaModelPath.isNotBlank()) {
+            val mockSymptoms = when (condition) {
+                "healthy" -> listOf("특이사항 없음 (건강함)")
+                "white_spots" -> listOf("손톱 표면의 흰 반점 (Leukonychia)")
+                "vertical_ridges" -> listOf("세로줄 현상 (Vertical Ridges)")
+                "spoon_nails" -> listOf("숟가락 모양 굽어짐 (Koilonychia)")
+                "brittle" -> listOf("손톱 갈라짐 및 깨짐 (Onychorrhexis)")
+                else -> listOf("일반적인 손톱 홈")
+            }
+            try {
+                val result = com.example.nailnutri.analysis.GemmaAnalyzer.analyzeSymptoms(
+                    context = context,
+                    symptoms = mockSymptoms,
+                    modelPath = gemmaModelPath,
+                    imagePath = "demo_$condition"
+                )
+                repository.saveResult(result)
+                onAnalysisComplete(result.id)
+                return@launch
+            } catch (e: Exception) {
+                // Fallback to local hardcoded mock data if Gemma model loading fails
+            }
+        }
 
         val result = when (condition) {
             "healthy" -> NailAnalysisResult(
@@ -653,4 +705,38 @@ private fun triggerMockAnalysis(
         repository.saveResult(result)
         onAnalysisComplete(result.id)
     }
+}
+
+private fun extractSymptomsFromBitmap(bitmap: Bitmap): List<String> {
+    var rSum = 0.0
+    var gSum = 0.0
+    var bSum = 0.0
+    val width = bitmap.width
+    val height = bitmap.height
+    val step = 10
+    var count = 0
+    
+    for (x in 0 until width step step) {
+        for (y in 0 until height step step) {
+            val pixel = bitmap.getPixel(x, y)
+            rSum += android.graphics.Color.red(pixel)
+            gSum += android.graphics.Color.green(pixel)
+            bSum += android.graphics.Color.blue(pixel)
+            count++
+        }
+    }
+    
+    val rAvg = rSum / count
+    val gAvg = gSum / count
+    val bAvg = bSum / count
+    
+    val symptoms = mutableListOf<String>()
+    
+    if (rAvg > 0 && (gAvg + bAvg) / (2 * rAvg) > 0.85) {
+        symptoms.add("창백한 조갑상상 (Pale Nail Bed)")
+    } else {
+        symptoms.add("일반적인 손톱 표면 무늬 (Common Ridges)")
+    }
+    
+    return symptoms
 }

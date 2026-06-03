@@ -15,12 +15,16 @@ interface DataRepository {
     val history: Flow<List<NailAnalysisResult>>
     val apiKey: Flow<String>
     val isMockMode: Flow<Boolean>
+    val gemmaModelPath: Flow<String>
+    val useGemma: Flow<Boolean>
 
     suspend fun saveResult(result: NailAnalysisResult)
     suspend fun clearHistory()
     suspend fun deleteResult(id: String)
     suspend fun setApiKey(key: String)
     suspend fun setMockMode(enabled: Boolean)
+    suspend fun setGemmaModelPath(path: String)
+    suspend fun setUseGemma(enabled: Boolean)
 }
 
 class DefaultDataRepository(context: Context) : DataRepository {
@@ -35,6 +39,12 @@ class DefaultDataRepository(context: Context) : DataRepository {
 
     private val _isMockMode = MutableStateFlow(true) // Default to Mock Mode for testing
     override val isMockMode = _isMockMode.asStateFlow()
+
+    private val _gemmaModelPath = MutableStateFlow("/data/local/tmp/gemma.bin")
+    override val gemmaModelPath = _gemmaModelPath.asStateFlow()
+
+    private val _useGemma = MutableStateFlow(false)
+    override val useGemma = _useGemma.asStateFlow()
 
     // Temporary compatibility data flow
     override val data: Flow<List<String>> = flowFromHistory()
@@ -54,6 +64,8 @@ class DefaultDataRepository(context: Context) : DataRepository {
 
         _apiKey.value = prefs.getString("api_key", "") ?: ""
         _isMockMode.value = prefs.getBoolean("is_mock_mode", true)
+        _gemmaModelPath.value = prefs.getString("gemma_model_path", "/data/local/tmp/gemma.bin") ?: "/data/local/tmp/gemma.bin"
+        _useGemma.value = prefs.getBoolean("use_gemma", false)
     }
 
     private fun flowFromHistory(): Flow<List<String>> = kotlinx.coroutines.flow.flow {
@@ -88,6 +100,16 @@ class DefaultDataRepository(context: Context) : DataRepository {
     override suspend fun setMockMode(enabled: Boolean) {
         prefs.edit().putBoolean("is_mock_mode", enabled).apply()
         _isMockMode.value = enabled
+    }
+
+    override suspend fun setGemmaModelPath(path: String) {
+        prefs.edit().putString("gemma_model_path", path).apply()
+        _gemmaModelPath.value = path
+    }
+
+    override suspend fun setUseGemma(enabled: Boolean) {
+        prefs.edit().putBoolean("use_gemma", enabled).apply()
+        _useGemma.value = enabled
     }
 
     private fun saveHistoryList(list: List<NailAnalysisResult>) {

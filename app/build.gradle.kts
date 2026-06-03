@@ -93,6 +93,9 @@ dependencies {
   // Google Generative AI (Gemini)
   implementation(libs.google.generativeai)
 
+  // MediaPipe GenAI Tasks (Gemma)
+  implementation(libs.mediapipe.tasks.genai)
+
   // Kotlinx Serialization JSON
   implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.6.3")
 }

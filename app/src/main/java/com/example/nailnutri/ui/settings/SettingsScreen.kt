@@ -32,12 +32,17 @@ fun SettingsScreen(
 ) {
     val apiKey by repository.apiKey.collectAsStateWithLifecycle(initialValue = "")
     val isMockMode by repository.isMockMode.collectAsStateWithLifecycle(initialValue = true)
+    val useGemma by repository.useGemma.collectAsStateWithLifecycle(initialValue = false)
+    val gemmaModelPath by repository.gemmaModelPath.collectAsStateWithLifecycle(initialValue = "/data/local/tmp/gemma.bin")
     
     var inputKey by remember(apiKey) { mutableStateOf(apiKey) }
     var mockEnabled by remember(isMockMode) { mutableStateOf(isMockMode) }
+    var gemmaActive by remember(useGemma) { mutableStateOf(useGemma) }
+    var modelPathInput by remember(gemmaModelPath) { mutableStateOf(gemmaModelPath) }
     var keyVisible by remember { mutableStateOf(false) }
     var testResult by remember { mutableStateOf<String?>(null) }
     var testingConnection by remember { mutableStateOf(false) }
+    var modelValidationResult by remember { mutableStateOf<String?>(null) }
 
     val coroutineScope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
@@ -109,7 +114,7 @@ fun SettingsScreen(
                 }
             }
 
-            // Gemini API Key Section
+            // Gemma On-Device Switch Card
             Card(
                 shape = RoundedCornerShape(16.dp),
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
@@ -118,113 +123,253 @@ fun SettingsScreen(
             ) {
                 Column(
                     modifier = Modifier.padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    Text(
-                        text = "Gemini API 설정",
-                        style = MaterialTheme.typography.titleMedium
-                    )
-
-                    Text(
-                        text = "손톱의 영양 분석(실시간 이미지 인식)을 위해 Google AI Studio의 Gemini API 키가 필요합니다.",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f)
-                    )
-
-                    OutlinedTextField(
-                        value = inputKey,
-                        onValueChange = { inputKey = it },
-                        label = { Text("Gemini API Key") },
-                        placeholder = { Text("AIzaSy...") },
-                        singleLine = true,
-                        visualTransformation = if (keyVisible) VisualTransformation.None else PasswordVisualTransformation(),
-                        trailingIcon = {
-                            IconButton(onClick = { keyVisible = !keyVisible }) {
-                                Icon(
-                                    imageVector = if (keyVisible) Icons.Default.VisibilityOff else Icons.Default.Visibility,
-                                    contentDescription = "비밀번호 보이기 토글"
-                                )
-                            }
-                        },
-                        modifier = Modifier.fillMaxWidth()
-                    )
-
                     Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.fillMaxWidth()
                     ) {
-                        Button(
-                            onClick = {
+                        Column(modifier = Modifier.weight(1.5f)) {
+                            Text(
+                                text = "온디바이스 Gemma LLM 사용",
+                                style = MaterialTheme.typography.titleMedium
+                            )
+                            Text(
+                                text = "활성화 시 인터넷 연결 없이 기기에서 Gemma 모델을 사용하여 진단 피드백을 생성합니다. 비활성화 시 클라우드 Gemini API를 사용합니다.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+                                modifier = Modifier.padding(top = 4.dp)
+                            )
+                        }
+                        Switch(
+                            checked = gemmaActive,
+                            onCheckedChange = {
+                                gemmaActive = it
                                 coroutineScope.launch {
-                                    repository.setApiKey(inputKey)
-                                    snackbarHostState.showSnackbar("API 키가 저장되었습니다.")
+                                    repository.setUseGemma(it)
+                                    snackbarHostState.showSnackbar(
+                                        if (it) "온디바이스 Gemma 분석이 설정되었습니다." else "클라우드 Gemini 분석이 설정되었습니다."
+                                    )
+                                }
+                            }
+                        )
+                    }
+                }
+            }
+
+            if (!gemmaActive) {
+                // Gemini API Key Section
+                Card(
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(
+                        modifier = Modifier.padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(16.dp)
+                    ) {
+                        Text(
+                            text = "Gemini API 설정",
+                            style = MaterialTheme.typography.titleMedium
+                        )
+
+                        Text(
+                            text = "손톱의 영양 분석(실시간 이미지 인식)을 위해 Google AI Studio의 Gemini API 키가 필요합니다.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f)
+                        )
+
+                        OutlinedTextField(
+                            value = inputKey,
+                            onValueChange = { inputKey = it },
+                            label = { Text("Gemini API Key") },
+                            placeholder = { Text("AIzaSy...") },
+                            singleLine = true,
+                            visualTransformation = if (keyVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                            trailingIcon = {
+                                IconButton(onClick = { keyVisible = !keyVisible }) {
+                                    Icon(
+                                        imageVector = if (keyVisible) Icons.Default.VisibilityOff else Icons.Default.Visibility,
+                                        contentDescription = "비밀번호 보이기 토글"
+                                    )
                                 }
                             },
-                            modifier = Modifier.weight(1f)
+                            modifier = Modifier.fillMaxWidth()
+                        )
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
-                            Icon(Icons.Default.Check, contentDescription = null)
-                            Spacer(Modifier.width(8.dp))
-                            Text("키 저장")
+                            Button(
+                                onClick = {
+                                    coroutineScope.launch {
+                                        repository.setApiKey(inputKey)
+                                        snackbarHostState.showSnackbar("API 키가 저장되었습니다.")
+                                    }
+                                },
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Icon(Icons.Default.Check, contentDescription = null)
+                                Spacer(Modifier.width(8.dp))
+                                Text("키 저장")
+                            }
+
+                            OutlinedButton(
+                                onClick = {
+                                    if (inputKey.isBlank()) {
+                                        testResult = "API 키를 입력해주세요."
+                                        return@OutlinedButton
+                                    }
+                                    testingConnection = true
+                                    testResult = null
+                                    coroutineScope.launch {
+                                        try {
+                                            val model = com.google.ai.client.generativeai.GenerativeModel(
+                                                modelName = "gemini-1.5-flash",
+                                                apiKey = inputKey
+                                            )
+                                            val response = model.generateContent("Say 'Connection Successful' in Korean in 5 words.")
+                                            testResult = response.text?.trim() ?: "응답이 비어있습니다."
+                                        } catch (e: Exception) {
+                                            testResult = "연결 실패: ${e.localizedMessage}"
+                                        } finally {
+                                            testingConnection = false
+                                        }
+                                    }
+                                },
+                                enabled = !testingConnection,
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                if (testingConnection) {
+                                    CircularProgressIndicator(
+                                        strokeWidth = 2.dp,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                } else {
+                                    Text("연결 테스트")
+                                }
+                            }
                         }
 
-                        OutlinedButton(
-                            onClick = {
-                                if (inputKey.isBlank()) {
-                                    testResult = "API 키를 입력해주세요."
-                                    return@OutlinedButton
-                                }
-                                testingConnection = true
-                                testResult = null
-                                coroutineScope.launch {
-                                    try {
-                                        val model = com.google.ai.client.generativeai.GenerativeModel(
-                                            modelName = "gemini-1.5-flash",
-                                            apiKey = inputKey
-                                        )
-                                        val response = model.generateContent("Say 'Connection Successful' in Korean in 5 words.")
-                                        testResult = response.text?.trim() ?: "응답이 비어있습니다."
-                                    } catch (e: Exception) {
-                                        testResult = "연결 실패: ${e.localizedMessage}"
-                                    } finally {
-                                        testingConnection = false
-                                    }
-                                }
-                            },
-                            enabled = !testingConnection,
-                            modifier = Modifier.weight(1f)
-                        ) {
-                            if (testingConnection) {
-                                CircularProgressIndicator(
-                                    strokeWidth = 2.dp,
-                                    modifier = Modifier.size(20.dp)
+                        testResult?.let { result ->
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .background(
+                                        if (result.contains("실패") || result.contains("입력")) 
+                                            MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.2f) 
+                                        else 
+                                            MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.2f),
+                                        shape = RoundedCornerShape(8.dp)
+                                    )
+                                    .padding(12.dp)
+                            ) {
+                                Text(
+                                    text = result,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = if (result.contains("실패") || result.contains("입력"))
+                                        MaterialTheme.colorScheme.error
+                                    else
+                                        MaterialTheme.colorScheme.primary
                                 )
-                            } else {
-                                Text("연결 테스트")
                             }
                         }
                     }
+                }
+            } else {
+                // Gemma On-Device Section
+                Card(
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(
+                        modifier = Modifier.padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(16.dp)
+                    ) {
+                        Text(
+                            text = "온디바이스 Gemma 모델 설정",
+                            style = MaterialTheme.typography.titleMedium
+                        )
 
-                    testResult?.let { result ->
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .background(
-                                    if (result.contains("실패") || result.contains("입력")) 
-                                        MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.2f) 
-                                    else 
-                                        MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.2f),
-                                    shape = RoundedCornerShape(8.dp)
-                                )
-                                .padding(12.dp)
+                        Text(
+                            text = "로컬 추론을 위해 Gemma 모델 파일(.bin)이 기기에 업로드되어 있어야 합니다. (추천: gemma-2b-it CPU/GPU)",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f)
+                        )
+
+                        OutlinedTextField(
+                            value = modelPathInput,
+                            onValueChange = { modelPathInput = it },
+                            label = { Text("Gemma 모델 로컬 경로") },
+                            placeholder = { Text("/data/local/tmp/gemma.bin") },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
-                            Text(
-                                text = result,
-                                style = MaterialTheme.typography.bodySmall,
-                                color = if (result.contains("실패") || result.contains("입력"))
-                                    MaterialTheme.colorScheme.error
-                                else
-                                    MaterialTheme.colorScheme.primary
-                            )
+                            Button(
+                                onClick = {
+                                    coroutineScope.launch {
+                                        repository.setGemmaModelPath(modelPathInput)
+                                        snackbarHostState.showSnackbar("Gemma 모델 경로가 저장되었습니다.")
+                                    }
+                                },
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Icon(Icons.Default.Check, contentDescription = null)
+                                Spacer(Modifier.width(8.dp))
+                                Text("경로 저장")
+                            }
+
+                            OutlinedButton(
+                                onClick = {
+                                    if (modelPathInput.isBlank()) {
+                                        modelValidationResult = "경로를 먼저 입력해주세요."
+                                        return@OutlinedButton
+                                    }
+                                    val file = java.io.File(modelPathInput)
+                                    modelValidationResult = if (file.exists()) {
+                                        val lengthGb = file.length().toDouble() / 1024.0 / 1024.0 / 1024.0
+                                        "파일 확인 성공! 크기: " + String.format(java.util.Locale.US, "%.2f", lengthGb) + " GB"
+                                    } else {
+                                        "파일을 찾을 수 없습니다.\n입력 경로: " + file.absolutePath + "\n(참고: 'adb push gemma-2b-it-gpu.bin /data/local/tmp/gemma.bin' 명령으로 파일을 밀어 넣을 수 있습니다.)"
+                                    }
+                                },
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Text("파일 검증")
+                            }
+                        }
+
+                        modelValidationResult?.let { result ->
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .background(
+                                        if (result.contains("성공")) 
+                                            MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.2f) 
+                                        else 
+                                            MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.2f),
+                                        shape = RoundedCornerShape(8.dp)
+                                    )
+                                    .padding(12.dp)
+                            ) {
+                                Text(
+                                    text = result,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = if (result.contains("성공"))
+                                        MaterialTheme.colorScheme.primary
+                                    else
+                                        MaterialTheme.colorScheme.error
+                                )
+                            }
                         }
                     }
                 }
