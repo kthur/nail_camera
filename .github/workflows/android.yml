@@ -27,16 +27,20 @@ jobs:
     - name: Grant execute permission for gradlew
       run: chmod +x gradlew
 
-    - name: Build Debug & Release APK
+    - name: Ensure Debug Keystore exists for signing
       run: |
-        ./gradlew assembleDebug
-        ./gradlew assembleRelease
+        mkdir -p ~/.android
+        if [ ! -f ~/.android/debug.keystore ]; then
+          keytool -genkeypair -alias androiddebugkey -keyalg RSA -keysize 2048 -validity 10000 \
+            -keystore ~/.android/debug.keystore -storepass android -keypass android \
+            -dname "CN=Android Debug, O=Android, C=US"
+        fi
 
-    - name: Generate Release Keystore and Sign Release APK
-      run: |
-        keytool -genkeypair -alias releasekey -keyalg RSA -keysize 2048 -validity 10000 -keystore release.keystore -storepass password -keypass password -dname "CN=NailNutri, O=NailNutri, C=KR"
-        jarsigner -keystore release.keystore -storepass password -keypass password app/build/outputs/apk/release/app-release-unsigned.apk releasekey
-        mv app/build/outputs/apk/release/app-release-unsigned.apk app/build/outputs/apk/release/app-release.apk
+    - name: Build Debug APK
+      run: ./gradlew assembleDebug
+
+    - name: Build Release APK (signed)
+      run: ./gradlew assembleRelease
 
     - name: Upload APK Artifacts
       uses: actions/upload-artifact@v4

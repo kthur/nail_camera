@@ -15,9 +15,22 @@ android {
         versionName = "1.0"
     }
 
+    signingConfigs {
+        create("debugSign") {
+            storeFile = file(
+                System.getenv("ANDROID_KEYSTORE_PATH") 
+                ?: "${System.getProperty("user.home")}/.android/debug.keystore"
+            )
+            storePassword = System.getenv("ANDROID_KEYSTORE_PASSWORD") ?: "android"
+            keyAlias = System.getenv("ANDROID_KEY_ALIAS") ?: "androiddebugkey"
+            keyPassword = System.getenv("ANDROID_KEY_PASSWORD") ?: "android"
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = false
+            signingConfig = signingConfigs["debugSign"]
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
         }
     }
