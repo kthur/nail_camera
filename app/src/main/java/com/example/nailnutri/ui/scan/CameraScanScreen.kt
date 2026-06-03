@@ -311,7 +311,17 @@ fun CameraScanScreen(
                                                 ContextCompat.getMainExecutor(context),
                                                 onSuccess = { file ->
                                                     try {
-                                                        val bitmap = BitmapFactory.decodeFile(file.absolutePath)
+                                                        val rawBitmap = BitmapFactory.decodeFile(file.absolutePath)
+                                                        val bitmap = cropNailRegion(rawBitmap)
+                                                        try {
+                                                            FileOutputStream(file).use { out ->
+                                                                bitmap.compress(Bitmap.CompressFormat.JPEG, 95, out)
+                                                                out.flush()
+                                                            }
+                                                        } catch (e: Exception) {
+                                                            e.printStackTrace()
+                                                        }
+
                                                         if (useGemma) {
                                                             if (gemmaModelPath.isBlank()) {
                                                                 throw Exception("Gemma 모델 경로가 설정되지 않았습니다. 설정에서 경로를 지정해 주세요.")
@@ -869,4 +879,21 @@ private fun extractSymptomsFromBitmap(bitmap: Bitmap): List<String> {
     }
     
     return symptoms
+}
+
+private fun cropNailRegion(bitmap: Bitmap): Bitmap {
+    val originalWidth = bitmap.width
+    val originalHeight = bitmap.height
+
+    val cropWidth = (originalWidth * 0.5f).toInt()
+    val cropHeight = (cropWidth * 1.5f).toInt()
+    val cropX = (originalWidth - cropWidth) / 2
+    val cropY = (originalHeight - cropHeight) / 2
+
+    val safeX = maxOf(0, minOf(cropX, originalWidth - cropWidth))
+    val safeY = maxOf(0, minOf(cropY, originalHeight - cropHeight))
+    val safeWidth = minOf(cropWidth, originalWidth - safeX)
+    val safeHeight = minOf(cropHeight, originalHeight - safeY)
+
+    return Bitmap.createBitmap(bitmap, safeX, safeY, safeWidth, safeHeight)
 }

@@ -52,7 +52,7 @@ object GeminiAnalyzer {
         imagePath: String
     ): NailAnalysisResult = withContext(Dispatchers.IO) {
         // 1. Resize bitmap to prevent OOM and reduce upload latency
-        val resizedBitmap = resizeBitmap(bitmap, 800)
+        val resizedBitmap = resizeBitmap(bitmap, 1600)
 
         // 2. Initialize Gemini Model with JSON response config
         val model = GenerativeModel(
@@ -64,33 +64,40 @@ object GeminiAnalyzer {
         )
 
         val prompt = """
-            You are a professional fingernail analysis assistant. Your task is to analyze this fingernail image for potential nutritional indicators.
+            You are an expert clinical nutritional analyst specialized in dermatological and fingernail biometrics. 
+            Perform a precise step-by-step diagnostic analysis on this fingernail image to identify nutritional deficiencies and sufficiencies.
             
-            1. Identify any visual nail symptoms: e.g., "White Spots", "Vertical Ridges", "Horizontal Ridges (Beau's Lines)", "Spoon Shape (Koilonychia)", "Brittle/Splitting Edges", "Pale Nail Bed", or "Healthy Nail".
-            2. Map these symptoms to likely nutrient deficiencies (e.g. Zinc, Iron, Biotin, Vitamin B12, Calcium, Protein, Magnesium, etc.) with a severity ("Severe", "Moderate", "None"), a brief explanation of how it relates to the nail's appearance, and recommended foods.
-            3. Highlight which key nutrients appear sufficient (e.g., if there are no white spots, Zinc levels seem sufficient). Provide their role and a positive feedback explanation.
-            4. Provide overall dietary or wellness advice.
+            Follow this Chain-of-Thought (CoT) diagnostic procedure:
+            1. Stage 1 - Texture and Surface Examination: Scan the nail plate closely from proximal to distal. Check for tiny elevated ridges, deep vertical lines, or horizontal indentations (Beau's lines). If fine vertical ridges are present, note that this is commonly linked to Vitamin B12, Magnesium deficiency, or aging.
+            2. Stage 2 - Discoloration and Spotting Detection: Scan for localized white specks, opaque dots (Leukonychia), or transverse white bands. Opaque white spots are a strong, classic indicator of Zinc or Calcium deficiency.
+            3. Stage 3 - Shape and Curvature Check: Assess the lateral profile. Check if the nail is flat, overly curved downward (brittleness/splitting), or concave/spoon-shaped with raised edges (Koilonychia, a severe indicator of Iron deficiency anemia).
+            4. Stage 4 - Nail Bed Vascular Colorization: Evaluate the pinkish tint of the nail bed underneath. If it is pale or white instead of pink, suggest potential Iron deficiency or general anemia.
+            5. Stage 5 - Formulation: Synthesize these visual facts into structured nutritional mapping:
+               - Deficient Nutrients: Assign severity levels ("Severe" or "Moderate" or "None") based on the prominence of the observed symptom, explain the correlation, and list highly bioavailable food sources in Korean.
+               - Sufficient Nutrients: Identify nutrients that seem adequate due to the absence of corresponding symptoms (e.g., "Zinc" is sufficient if no white spots are found), describe their positive role in Korean.
+               - Overall Wellness Advice: Synthesize a general nutritional recommendation in clear, professional Korean.
             
             Return the output strictly in the following JSON schema:
             {
-              "symptoms": ["List of detected nail symptoms"],
+              "symptoms": ["List of detected nail symptoms in Korean (e.g. '손톱 흰 반점', '세로줄 홈')"],
               "deficientNutrients": [
                 {
-                  "name": "Nutrient Name",
+                  "name": "Nutrient Name (e.g., 아연, 철분, 비오틴)",
                   "severity": "Severe" or "Moderate" or "None",
-                  "symptomExplanation": "Explanation linking symptom to deficiency",
+                  "symptomExplanation": "Clinical correlation between symptom and nutrient deficiency in Korean",
                   "recommendedFoods": ["Food 1", "Food 2", "Food 3"]
                 }
               ],
               "sufficientNutrients": [
                 {
                   "name": "Nutrient Name",
-                  "symptomExplanation": "Positive indicator explanation",
-                  "role": "Role of this nutrient in nail health"
+                  "symptomExplanation": "Feedback on why it is sufficient and positive signs in Korean",
+                  "role": "Biological role of this nutrient in maintaining nail health in Korean"
                 }
               ],
-              "overallAdvice": "General advice text"
+              "overallAdvice": "Synthesized dietary recommendations and healthy habits in Korean"
             }
+            Do not output any markdown code blocks, markers, or text outside the JSON. Return only the raw JSON string.
         """.trimIndent()
 
         val inputContent = content {
