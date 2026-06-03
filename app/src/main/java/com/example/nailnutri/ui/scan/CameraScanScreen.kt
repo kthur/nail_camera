@@ -100,6 +100,10 @@ fun CameraScanScreen(
     var analyzing by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var showDemoSelector by remember { mutableStateOf(true) }
+    var showSymptomSelectorDialog by remember { mutableStateOf(false) }
+    var capturedFileForGemma by remember { mutableStateOf<File?>(null) }
+    var capturedBitmapForGemma by remember { mutableStateOf<Bitmap?>(null) }
+    val selectedSymptoms = remember { mutableStateListOf<String>() }
 
     val imageCapture = remember { ImageCapture.Builder().build() }
 
@@ -306,36 +310,40 @@ fun CameraScanScreen(
                                                 context,
                                                 ContextCompat.getMainExecutor(context),
                                                 onSuccess = { file ->
-                                                    coroutineScope.launch {
-                                                        try {
-                                                            val bitmap = BitmapFactory.decodeFile(file.absolutePath)
-                                                            val result = if (useGemma) {
-                                                                if (gemmaModelPath.isBlank()) {
-                                                                    throw Exception("Gemma 모델 경로가 설정되지 않았습니다. 설정에서 경로를 지정해 주세요.")
-                                                                }
-                                                                val detectedSymptoms = extractSymptomsFromBitmap(bitmap)
-                                                                com.example.nailnutri.analysis.GemmaAnalyzer.analyzeSymptoms(
-                                                                    context = context,
-                                                                    symptoms = detectedSymptoms,
-                                                                    modelPath = gemmaModelPath,
-                                                                    imagePath = file.absolutePath
-                                                                )
-                                                            } else {
-                                                                if (apiKey.isBlank()) {
-                                                                    throw Exception("Gemini API 키가 없습니다. 설정에서 키를 등록하거나 데모 모드를 활성화해주세요.")
-                                                                }
-                                                                GeminiAnalyzer.analyzeNail(
-                                                                    bitmap = bitmap,
-                                                                    apiKey = apiKey,
-                                                                    imagePath = file.absolutePath
-                                                                )
+                                                    try {
+                                                        val bitmap = BitmapFactory.decodeFile(file.absolutePath)
+                                                        if (useGemma) {
+                                                            if (gemmaModelPath.isBlank()) {
+                                                                throw Exception("Gemma 모델 경로가 설정되지 않았습니다. 설정에서 경로를 지정해 주세요.")
                                                             }
-                                                            repository.saveResult(result)
-                                                            onAnalysisComplete(result.id)
-                                                        } catch (e: Exception) {
-                                                            errorMessage = e.message ?: "분석 중 오류 발생"
-                                                            analyzing = false
+                                                            capturedFileForGemma = file
+                                                            capturedBitmapForGemma = bitmap
+                                                            selectedSymptoms.clear()
+                                                            selectedSymptoms.addAll(extractSymptomsFromBitmap(bitmap))
+                                                            showSymptomSelectorDialog = true
+                                                        } else {
+                                                            analyzing = true
+                                                            coroutineScope.launch {
+                                                                try {
+                                                                    if (apiKey.isBlank()) {
+                                                                        throw Exception("Gemini API 키가 없습니다. 설정에서 키를 등록하거나 데모 모드를 활성화해주세요.")
+                                                                    }
+                                                                    val result = GeminiAnalyzer.analyzeNail(
+                                                                        bitmap = bitmap,
+                                                                        apiKey = apiKey,
+                                                                        imagePath = file.absolutePath
+                                                                    )
+                                                                    repository.saveResult(result)
+                                                                    onAnalysisComplete(result.id)
+                                                                } catch (e: Exception) {
+                                                                    errorMessage = e.message ?: "분석 중 오류 발생"
+                                                                    analyzing = false
+                                                                }
+                                                            }
                                                         }
+                                                    } catch (e: Exception) {
+                                                        errorMessage = e.message ?: "이미지 파일 로드 실패"
+                                                        analyzing = false
                                                     }
                                                 },
                                                 onError = { exc ->
@@ -390,6 +398,123 @@ fun CameraScanScreen(
                     }
                 }
             }
+        }
+
+        // Symptom Selector Dialog for Gemma
+        if (showSymptomSelectorDialog && capturedFileForGemma != null && capturedBitmapForGemma != null) {
+            val availableSymptoms = listOf(
+                "손톱 표면의 흰 반점 (Leukonychia)",
+                "세로줄 현상 (Vertical Ridges)",
+                "숟가락 모양 굽어짐 (Koilonychia)",
+                "손톱 갈라짐 및 깨짐 (Onychorrhexis)"
+            )
+
+            AlertDialog(
+                onDismissRequest = {
+                    showSymptomSelectorDialog = false
+                    capturedFileForGemma = null
+                    capturedBitmapForGemma = null
+                },
+                title = { Text("관찰되는 손톱 증상 확인", fontWeight = FontWeight.Bold) },
+                text = {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .verticalScroll(rememberScrollState()),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Text(
+                            text = "온디바이스 Gemma 모델 분석을 위해, 촬영하신 이미지에서 식별되는 손톱 증상을 체크해 주세요.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+                            modifier = Modifier.padding(bottom = 6.dp)
+                        )
+
+                        // Basic status info
+                        val initialSymptom = extractSymptomsFromBitmap(capturedBitmapForGemma!!)
+                        Text(
+                            text = "💡 이미지 분석 기본 혈색: ${initialSymptom.first()}",
+                            style = MaterialTheme.typography.bodySmall,
+                            fontWeight = FontWeight.Bold,
+                            color = NutriGreen,
+                            modifier = Modifier.padding(bottom = 8.dp)
+                        )
+
+                        availableSymptoms.forEach { symptom ->
+                            val isChecked = selectedSymptoms.contains(symptom)
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable {
+                                        if (isChecked) {
+                                            selectedSymptoms.remove(symptom)
+                                        } else {
+                                            selectedSymptoms.add(symptom)
+                                        }
+                                    }
+                                    .padding(vertical = 6.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Checkbox(
+                                    checked = isChecked,
+                                    onCheckedChange = { checked ->
+                                        if (checked) {
+                                            selectedSymptoms.add(symptom)
+                                        } else {
+                                            selectedSymptoms.remove(symptom)
+                                        }
+                                    }
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(text = symptom, style = MaterialTheme.typography.bodyMedium)
+                            }
+                        }
+                    }
+                },
+                confirmButton = {
+                    Button(
+                        onClick = {
+                            showSymptomSelectorDialog = false
+                            analyzing = true
+                            
+                            val finalSymptoms = selectedSymptoms.toList()
+                            val finalFile = capturedFileForGemma!!
+                            
+                            coroutineScope.launch {
+                                try {
+                                    val result = com.example.nailnutri.analysis.GemmaAnalyzer.analyzeSymptoms(
+                                        context = context,
+                                        symptoms = if (finalSymptoms.isEmpty()) listOf("특이사항 없음 (건강함)") else finalSymptoms,
+                                        modelPath = gemmaModelPath,
+                                        imagePath = finalFile.absolutePath
+                                    )
+                                    repository.saveResult(result)
+                                    onAnalysisComplete(result.id)
+                                } catch (e: Exception) {
+                                    errorMessage = e.message ?: "온디바이스 분석 중 오류 발생"
+                                    analyzing = false
+                                } finally {
+                                    capturedFileForGemma = null
+                                    capturedBitmapForGemma = null
+                                }
+                            }
+                        }
+                    ) {
+                        Text("분석 시작")
+                    }
+                },
+                dismissButton = {
+                    TextButton(
+                        onClick = {
+                            showSymptomSelectorDialog = false
+                            capturedFileForGemma = null
+                            capturedBitmapForGemma = null
+                        }
+                    ) {
+                        Text("취소")
+                    }
+                }
+            )
         }
     }
 }
