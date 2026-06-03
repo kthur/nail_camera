@@ -289,9 +289,14 @@ fun CameraScanScreen(
                                                 onAnalysisComplete
                                             )
                                         } else {
-                                            if (apiKey.isBlank()) {
+                                            if (!useGemma && apiKey.isBlank()) {
                                                 errorMessage =
                                                     "Gemini API 키가 없습니다. 설정에서 키를 등록하거나 데모 모드를 활성화해주세요."
+                                                return@clickable
+                                            }
+                                            if (useGemma && gemmaModelPath.isBlank()) {
+                                                errorMessage =
+                                                    "Gemma 모델 경로가 설정되지 않았습니다. 설정에서 경로를 지정해 주세요."
                                                 return@clickable
                                             }
                                             analyzing = true

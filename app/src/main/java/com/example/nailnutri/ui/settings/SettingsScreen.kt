@@ -22,6 +22,12 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.nailnutri.data.DataRepository
 import kotlinx.coroutines.launch
+import java.io.File
+import java.io.FileOutputStream
+import java.net.HttpURLConnection
+import java.net.URL
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -30,6 +36,7 @@ fun SettingsScreen(
     onBackClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val context = androidx.compose.ui.platform.LocalContext.current
     val apiKey by repository.apiKey.collectAsStateWithLifecycle(initialValue = "")
     val isMockMode by repository.isMockMode.collectAsStateWithLifecycle(initialValue = true)
     val useGemma by repository.useGemma.collectAsStateWithLifecycle(initialValue = false)
@@ -43,6 +50,9 @@ fun SettingsScreen(
     var testResult by remember { mutableStateOf<String?>(null) }
     var testingConnection by remember { mutableStateOf(false) }
     var modelValidationResult by remember { mutableStateOf<String?>(null) }
+    var isDownloading by remember { mutableStateOf(false) }
+    var downloadProgress by remember { mutableStateOf(0f) }
+    var downloadError by remember { mutableStateOf<String?>(null) }
 
     val coroutineScope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
@@ -310,6 +320,103 @@ fun SettingsScreen(
                             modifier = Modifier.fillMaxWidth()
                         )
 
+                        // Downloader Section
+                        HorizontalDivider(
+                            modifier = Modifier.padding(vertical = 8.dp),
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f)
+                        )
+
+                        Text(
+                            text = "모델 파일 자동 다운로드",
+                            style = MaterialTheme.typography.titleSmall
+                        )
+
+                        Text(
+                            text = "Gemma 2B-it 모델(약 1.4GB)을 원격 서버로부터 앱 내부 저장소로 다운로드합니다. 대용량 파일이므로 Wi-Fi 연결을 권장합니다.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                        )
+
+                        if (isDownloading) {
+                            Column(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                LinearProgressIndicator(
+                                    progress = { downloadProgress },
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Text(
+                                        text = "모델 다운로드 중...",
+                                        style = MaterialTheme.typography.bodySmall
+                                    )
+                                    Text(
+                                        text = String.format(java.util.Locale.US, "%.1f%%", downloadProgress * 100f),
+                                        style = MaterialTheme.typography.bodySmall,
+                                        fontWeight = androidx.compose.ui.text.font.FontWeight.Bold
+                                    )
+                                }
+                            }
+                        } else {
+                            Button(
+                                onClick = {
+                                    isDownloading = true
+                                    downloadProgress = 0f
+                                    downloadError = null
+                                    coroutineScope.launch {
+                                        downloadGemmaModel(
+                                            context = context,
+                                            onProgress = { progress ->
+                                                downloadProgress = progress
+                                            },
+                                            onComplete = { absolutePath ->
+                                                isDownloading = false
+                                                modelPathInput = absolutePath
+                                                coroutineScope.launch {
+                                                    repository.setGemmaModelPath(absolutePath)
+                                                    snackbarHostState.showSnackbar("Gemma 모델 다운로드 및 경로 저장 완료!")
+                                                }
+                                            },
+                                            onError = { errorMsg ->
+                                                isDownloading = false
+                                                downloadError = errorMsg
+                                            }
+                                        )
+                                    }
+                                },
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Text("Gemma 모델 자동 다운로드 시작")
+                            }
+                        }
+
+                        downloadError?.let { error ->
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .background(
+                                        MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.2f),
+                                        shape = RoundedCornerShape(8.dp)
+                                    )
+                                    .padding(12.dp)
+                            ) {
+                                Text(
+                                    text = "다운로드 실패: $error",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.error
+                                )
+                            }
+                        }
+
+                        HorizontalDivider(
+                            modifier = Modifier.padding(vertical = 8.dp),
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f)
+                        )
+
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -405,5 +512,58 @@ fun SettingsScreen(
                 }
             }
         }
+    }
+}
+
+private suspend fun downloadGemmaModel(
+    context: android.content.Context,
+    onProgress: (Float) -> Unit,
+    onComplete: (String) -> Unit,
+    onError: (String) -> Unit
+) = withContext(Dispatchers.IO) {
+    val targetFile = File(context.filesDir, "gemma.bin")
+    // Google Storage public dataset direct URL for Gemma-2b-it CPU-int4 model
+    val urlString = "https://storage.googleapis.com/jmstore/jm-gemma-2b-it-cpu-int4.bin"
+    try {
+        val url = URL(urlString)
+        val connection = url.openConnection() as HttpURLConnection
+        connection.connectTimeout = 15000
+        connection.readTimeout = 30000
+        connection.connect()
+
+        if (connection.responseCode != HttpURLConnection.HTTP_OK) {
+            throw Exception("서버 응답 오류 (HTTP ${connection.responseCode})")
+        }
+
+        val fileLength = connection.contentLengthLong
+        val input = connection.inputStream
+        val output = FileOutputStream(targetFile)
+
+        val data = ByteArray(16384) // 16KB buffer
+        var total: Long = 0
+        var count: Int
+        
+        while (input.read(data).also { count = it } != -1) {
+            total += count
+            if (fileLength > 0) {
+                onProgress(total.toFloat() / fileLength.toFloat())
+            }
+            output.write(data, 0, count)
+        }
+
+        output.flush()
+        output.close()
+        input.close()
+        onComplete(targetFile.absolutePath)
+    } catch (e: java.io.IOException) {
+        if (targetFile.exists()) {
+            targetFile.delete()
+        }
+        onError("네트워크 다운로드 실패: ${e.localizedMessage ?: "I/O Error"}")
+    } catch (e: Exception) {
+        if (targetFile.exists()) {
+            targetFile.delete()
+        }
+        onError(e.localizedMessage ?: "다운로드 중 알 수 없는 오류 발생")
     }
 }
