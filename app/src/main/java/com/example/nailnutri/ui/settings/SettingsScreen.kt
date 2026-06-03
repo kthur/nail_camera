@@ -522,8 +522,8 @@ private suspend fun downloadGemmaModel(
     onError: (String) -> Unit
 ) = withContext(Dispatchers.IO) {
     val targetFile = File(context.filesDir, "gemma.bin")
-    // Google Storage public dataset direct URL for Gemma-2b-it CPU-int4 model
-    val urlString = "https://storage.googleapis.com/jmstore/jm-gemma-2b-it-cpu-int4.bin"
+    // Public Hugging Face ungated mirror for Gemma-2b-it CPU-int4 model
+    val urlString = "https://huggingface.co/ASahu16/gemma/resolve/main/gemma-2b-it-cpu-int4.bin"
     try {
         val url = URL(urlString)
         val connection = url.openConnection() as HttpURLConnection
