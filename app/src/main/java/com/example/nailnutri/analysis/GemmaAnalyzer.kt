@@ -1,19 +1,24 @@
 package com.example.nailnutri.analysis
 
 import android.content.Context
+import android.graphics.Bitmap
+import android.graphics.Color
 import com.example.nailnutri.data.NailAnalysisResult
 import com.example.nailnutri.data.NutrientDetail
 import com.example.nailnutri.data.SufficientNutrientDetail
 import com.google.mediapipe.tasks.genai.llminference.LlmInference
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import kotlinx.serialization.json.Json
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.Json
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import java.util.UUID
+import kotlin.math.max
+import kotlin.math.min
+import kotlin.math.sqrt
 
 object GemmaAnalyzer {
 
@@ -40,8 +45,8 @@ object GemmaAnalyzer {
         val role: String
     )
 
-    private val jsonParser = Json { 
-        ignoreUnknownKeys = true 
+    private val jsonParser = Json {
+        ignoreUnknownKeys = true
         coerceInputValues = true
     }
 
@@ -59,7 +64,6 @@ object GemmaAnalyzer {
             return cachedLlmInference!!
         }
 
-        // Close old inference if exists
         try {
             cachedLlmInference?.close()
         } catch (e: Exception) {
@@ -69,7 +73,7 @@ object GemmaAnalyzer {
         val options = LlmInference.LlmInferenceOptions.builder()
             .setModelPath(modelPath)
             .setMaxTokens(1024)
-            .setTemperature(0.3f) // Lower temperature for more structured JSON
+            .setTemperature(0.3f)
             .build()
 
         val inference = LlmInference.createFromOptions(context.applicationContext, options)
@@ -78,30 +82,70 @@ object GemmaAnalyzer {
         return inference
     }
 
-    suspend fun analyzeSymptoms(
+    suspend fun analyzeNail(
         context: Context,
-        symptoms: List<String>,
+        bitmap: Bitmap,
         modelPath: String,
         imagePath: String
     ): NailAnalysisResult = withContext(Dispatchers.IO) {
+        val features = NailFeatureExtractor.extract(bitmap)
+        val detectedSymptoms = features.toSymptomList()
+        val featureDescription = features.toKoreanDescription()
+
+        val prompt = buildPrompt(detectedSymptoms, featureDescription)
+
+        try {
+            val llm = getLlmInference(context, modelPath)
+            val responseText = llm.generateResponse(prompt)
+            if (responseText.isNullOrBlank()) {
+                throw Exception("Received empty response from Gemma model.")
+            }
+
+            val cleanJson = cleanJsonResponse(responseText)
+            val parsed = jsonParser.decodeFromString<GemmaJsonResult>(cleanJson)
+            val dateStr = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault()).format(Date())
+
+            NailAnalysisResult(
+                id = UUID.randomUUID().toString(),
+                date = dateStr,
+                imagePath = imagePath,
+                symptoms = if (parsed.symptoms.isNotEmpty()) parsed.symptoms else detectedSymptoms,
+                deficientNutrients = parsed.deficientNutrients.map {
+                    NutrientDetail(it.name, it.severity, it.symptomExplanation, it.recommendedFoods)
+                },
+                sufficientNutrients = parsed.sufficientNutrients.map {
+                    SufficientNutrientDetail(it.name, it.symptomExplanation, it.role)
+                },
+                overallAdvice = parsed.overallAdvice
+            )
+        } catch (e: Exception) {
+            createFallbackResult(detectedSymptoms, imagePath, e.localizedMessage ?: "JSON Parse Error")
+        }
+    }
+
+    private fun buildPrompt(symptoms: List<String>, featureDescription: String): String {
         val symptomsStr = symptoms.joinToString(", ")
-        val prompt = """
-            You are a professional fingernail analysis assistant. Your task is to generate nutritional deficiency assessments based on the user's nail symptoms.
-            The user has the following nail symptoms: $symptomsStr.
+        return """
+            You are a professional fingernail analysis assistant. Generate nutritional assessments based on nail image features.
             
-            Based on these symptoms, identify:
-            1. Likely nutrient deficiencies (e.g. Zinc, Iron, Biotin, Vitamin B12, Calcium, Protein, etc.) with a severity ("Severe", "Moderate", "None"), a brief explanation of how it relates to the symptoms, and recommended foods.
-            2. Key nutrients that seem sufficient (those unrelated to the symptoms), explaining their positive role in nail health.
-            3. Provide overall dietary and wellness advice in Korean.
+            The on-device image analyzer detected the following nail features:
+            $featureDescription
             
-            Return the output strictly in the following JSON schema:
+            Derived symptom tags: $symptomsStr
+            
+            Based on the image features, identify:
+            1. Likely nutrient deficiencies (Zinc, Iron, Biotin, Vitamin B12, Calcium, Protein, Magnesium, etc.) with a severity ("Severe", "Moderate", or "None"), a brief explanation linking the feature to the deficiency, and recommended foods.
+            2. Key nutrients that seem sufficient (those unrelated to the features), explaining their positive role in nail health.
+            3. Overall dietary and wellness advice in Korean.
+            
+            Return strictly the following JSON schema without any extra text or markdown:
             {
-              "symptoms": ["$symptomsStr"],
+              "symptoms": ["Korean symptom descriptions matching the features"],
               "deficientNutrients": [
                 {
                   "name": "Nutrient Name",
                   "severity": "Severe" or "Moderate" or "None",
-                  "symptomExplanation": "Explanation linking symptom to deficiency",
+                  "symptomExplanation": "Explanation linking feature to deficiency",
                   "recommendedFoods": ["Food 1", "Food 2"]
                 }
               ],
@@ -116,38 +160,6 @@ object GemmaAnalyzer {
             }
             Do not include any introductory or concluding text, only the JSON block.
         """.trimIndent()
-
-        try {
-            val llm = getLlmInference(context, modelPath)
-            val responseText = llm.generateResponse(prompt)
-            if (responseText.isNullOrBlank()) {
-                throw Exception("Received empty response from Gemma model.")
-            }
-
-            // Extract JSON if model wrapped it in markdown code block
-            val cleanJson = cleanJsonResponse(responseText)
-
-            // Parse JSON response
-            val parsed = jsonParser.decodeFromString<GemmaJsonResult>(cleanJson)
-            val dateStr = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault()).format(Date())
-
-            NailAnalysisResult(
-                id = UUID.randomUUID().toString(),
-                date = dateStr,
-                imagePath = imagePath,
-                symptoms = if (parsed.symptoms.isNotEmpty()) parsed.symptoms else symptoms,
-                deficientNutrients = parsed.deficientNutrients.map {
-                    NutrientDetail(it.name, it.severity, it.symptomExplanation, it.recommendedFoods)
-                },
-                sufficientNutrients = parsed.sufficientNutrients.map {
-                    SufficientNutrientDetail(it.name, it.symptomExplanation, it.role)
-                },
-                overallAdvice = parsed.overallAdvice
-            )
-        } catch (e: Exception) {
-            // Fallback generation if LLM outputs invalid JSON or crashes
-            createFallbackResult(symptoms, imagePath, e.localizedMessage ?: "JSON Parse Error")
-        }
     }
 
     private fun cleanJsonResponse(response: String): String {
@@ -165,8 +177,7 @@ object GemmaAnalyzer {
 
     private fun createFallbackResult(symptoms: List<String>, imagePath: String, errorMsg: String): NailAnalysisResult {
         val dateStr = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault()).format(Date())
-        
-        // Generate rudimentary but safe analysis based on symptoms to prevent UI crash
+
         val isHealthy = symptoms.any { it.contains("건강") || it.contains("healthy", ignoreCase = true) }
         val def = mutableListOf<NutrientDetail>()
         val suf = mutableListOf<SufficientNutrientDetail>()
@@ -200,14 +211,13 @@ object GemmaAnalyzer {
                 advice = "쉽게 찢어지고 갈라지는 증상은 각질 구조층 수분 및 비오틴 부족 현상입니다. 외부 수분 충전도 동반해 주세요."
                 symptomMatched = true
             }
-            
+
             if (!symptomMatched) {
                 def.add(NutrientDetail("종합 비타민", "Moderate", "분석 결과 해석 과정에 결핍이 확인되었습니다.", listOf("종합 비타민제", "신선한 과일", "채소")))
                 advice = "손톱 증상에 따른 온디바이스 AI 영양 추정 과정이 완료되었습니다. 균형 식단 섭취에 참고하세요."
             }
         }
 
-        // Add a debug warning for fallback execution
         advice = "$advice (Gemma On-Device Local Parse Mode)"
 
         return NailAnalysisResult(
@@ -219,5 +229,191 @@ object GemmaAnalyzer {
             sufficientNutrients = suf,
             overallAdvice = advice
         )
+    }
+}
+
+internal data class NailFeatures(
+    val averageRedness: Double,
+    val averageSaturation: Double,
+    val averageBrightness: Double,
+    val whiteSpotRatio: Double,
+    val darkEdgeRatio: Double,
+    val brightnessStdDev: Double,
+    val rednessUniformity: Double,
+    val isPale: Boolean,
+    val hasWhiteSpots: Boolean,
+    val isDarkEdges: Boolean,
+    val isUnevenTexture: Boolean,
+    val isLowRedness: Boolean
+) {
+    fun toSymptomList(): List<String> {
+        val list = mutableListOf<String>()
+        if (isPale) {
+            list.add("창백한 네일베드 (Pale Nail Bed)")
+        }
+        if (hasWhiteSpots) {
+            list.add("손톱 표면의 흰 반점 (Leukonychia)")
+        }
+        if (isUnevenTexture) {
+            list.add("거친 손톱 표면 / 세로줄 현상 (Vertical Ridges)")
+        }
+        if (isDarkEdges) {
+            list.add("거의 숟가락형 함몰 징후 (Dark Nail Edges)")
+        }
+        if (isLowRedness) {
+            list.add("낮은 혈색 / 저산소 징후 (Low Redness)")
+        }
+        if (list.isEmpty()) {
+            list.add("특이사항 없음 (건강함)")
+        }
+        return list
+    }
+
+    fun toKoreanDescription(): String {
+        return buildString {
+            append("- 평균 혈색(R채널): ${"%.1f".format(averageRedness)}/255")
+            append(if (isLowRedness) " (낮음)" else if (isPale) " (창백함)" else " (정상)")
+            append("\n")
+            append("- 평균 채도: ${"%.1f".format(averageSaturation * 100)}%")
+            append(if (isPale) " (저채도)" else "")
+            append("\n")
+            append("- 평균 명도: ${"%.1f".format(averageBrightness * 100)}%")
+            append(if (hasWhiteSpots) " (높음 - 반점 가능성)" else "")
+            append("\n")
+            append("- 흰색 픽셀 비율: ${"%.2f".format(whiteSpotRatio * 100)}%")
+            append(if (hasWhiteSpots) " (반점 감지)" else "")
+            append("\n")
+            append("- 어두운 가장자리 비율: ${"%.2f".format(darkEdgeRatio * 100)}%")
+            append(if (isDarkEdges) " (가장자리 어두움 - 함몰/철결핍 가능성)" else "")
+            append("\n")
+            append("- 명도 표준편차: ${"%.1f".format(brightnessStdDev)}")
+            append(if (isUnevenTexture) " (표면 고르지 못함 - 세로줄 가능성)" else "")
+            append("\n")
+            append("- 혈색 균일도(표준편차): ${"%.1f".format(rednessUniformity)}")
+            append(if (rednessUniformity > 30) " (혈색 불균일)" else "")
+        }
+    }
+}
+
+internal object NailFeatureExtractor {
+
+    fun extract(bitmap: Bitmap): NailFeatures {
+        val width = bitmap.width
+        val height = bitmap.height
+        if (width == 0 || height == 0) {
+            return defaultFeatures()
+        }
+
+        val sampleStep = max(1, min(width, height) / 80)
+        val pixels = ArrayList<Int>((width / sampleStep + 1) * (height / sampleStep + 1))
+
+        var rSum = 0.0
+        var gSum = 0.0
+        var bSum = 0.0
+        var vSum = 0.0
+        var sSum = 0.0
+        var whiteCount = 0
+        var darkEdgeCount = 0
+        val totalSamples = (width / sampleStep) * (height / sampleStep)
+        var brightnessValues = DoubleArray(totalSamples)
+        var redValues = DoubleArray(totalSamples)
+        var idx = 0
+
+        val edgeThreshold = (width * 0.12).toInt().coerceAtLeast(2)
+        val darkEdgeThreshold = 60
+
+        for (x in 0 until width step sampleStep) {
+            for (y in 0 until height step sampleStep) {
+                val pixel = bitmap.getPixel(x, y)
+                val r = Color.red(pixel)
+                val g = Color.green(pixel)
+                val b = Color.blue(pixel)
+
+                rSum += r
+                gSum += g
+                bSum += b
+
+                val hsv = FloatArray(3)
+                Color.RGBToHSV(r, g, b, hsv)
+                sSum += hsv[1]
+                vSum += hsv[2]
+
+                if (idx < totalSamples) {
+                    brightnessValues[idx] = hsv[2].toDouble()
+                    redValues[idx] = r.toDouble()
+                }
+                idx++
+
+                if (hsv[2] > 0.85f && hsv[1] < 0.18f) {
+                    whiteCount++
+                }
+                val isEdge = x < edgeThreshold || x > width - edgeThreshold ||
+                        y < edgeThreshold || y > height - edgeThreshold
+                if (isEdge && r < darkEdgeThreshold && g < darkEdgeThreshold && b < darkEdgeThreshold) {
+                    darkEdgeCount++
+                }
+            }
+        }
+
+        val sampleCount = idx.coerceAtLeast(1)
+        val avgR = rSum / sampleCount
+        val avgG = gSum / sampleCount
+        val avgB = bSum / sampleCount
+        val avgS = sSum / sampleCount
+        val avgV = vSum / sampleCount
+        val whiteSpotRatio = whiteCount.toDouble() / sampleCount
+        val darkEdgeRatio = darkEdgeCount.toDouble() / sampleCount
+
+        val brightnessStdDev = stdDev(brightnessValues, totalSamples, avgV)
+        val rednessStdDev = stdDev(redValues, totalSamples, avgR)
+
+        val isLowRedness = avgR < 130 && (avgR > avgB * 0.95)
+        val isPale = avgS < 0.22 && avgV > 0.45 && avgR < 200
+        val hasWhiteSpots = whiteSpotRatio > 0.012
+        val isDarkEdges = darkEdgeRatio > 0.18
+        val isUnevenTexture = brightnessStdDev > 22 || rednessStdDev > 35
+
+        return NailFeatures(
+            averageRedness = avgR,
+            averageSaturation = avgS,
+            averageBrightness = avgV,
+            whiteSpotRatio = whiteSpotRatio,
+            darkEdgeRatio = darkEdgeRatio,
+            brightnessStdDev = brightnessStdDev,
+            rednessUniformity = rednessStdDev,
+            isPale = isPale,
+            hasWhiteSpots = hasWhiteSpots,
+            isDarkEdges = isDarkEdges,
+            isUnevenTexture = isUnevenTexture,
+            isLowRedness = isLowRedness
+        )
+    }
+
+    private fun defaultFeatures() = NailFeatures(
+        averageRedness = 0.0,
+        averageSaturation = 0.0,
+        averageBrightness = 0.0,
+        whiteSpotRatio = 0.0,
+        darkEdgeRatio = 0.0,
+        brightnessStdDev = 0.0,
+        rednessUniformity = 0.0,
+        isPale = false,
+        hasWhiteSpots = false,
+        isDarkEdges = false,
+        isUnevenTexture = false,
+        isLowRedness = false
+    )
+
+    private fun stdDev(values: DoubleArray, total: Int, mean: Double): Double {
+        if (total <= 0) return 0.0
+        var sum = 0.0
+        var n = 0
+        for (i in 0 until total) {
+            val diff = values[i] - mean
+            sum += diff * diff
+            n++
+        }
+        if (n == 0) return 0.0
+        return sqrt(sum / n)
     }
 }

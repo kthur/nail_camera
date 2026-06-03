@@ -10,23 +10,19 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.camera.core.*
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
-import androidx.compose.animation.*
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.FlashOff
 import androidx.compose.material.icons.filled.FlashOn
 import androidx.compose.material.icons.filled.Info
-import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -34,7 +30,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.RoundRect
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -100,11 +95,6 @@ fun CameraScanScreen(
     var analyzing by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var showDemoSelector by remember { mutableStateOf(true) }
-    var showSymptomSelectorDialog by remember { mutableStateOf(false) }
-    var capturedFileForGemma by remember { mutableStateOf<File?>(null) }
-    var capturedBitmapForGemma by remember { mutableStateOf<Bitmap?>(null) }
-    val selectedSymptoms = remember { mutableStateListOf<String>() }
-
     val imageCapture = remember { ImageCapture.Builder().build() }
 
     LaunchedEffect(flashEnabled) {
@@ -143,7 +133,6 @@ fun CameraScanScreen(
                 .padding(paddingValues)
         ) {
             if (analyzing) {
-                // Scanning view inside container
                 Box(
                     modifier = Modifier.fillMaxSize(),
                     contentAlignment = Alignment.Center
@@ -168,7 +157,6 @@ fun CameraScanScreen(
                     }
                 }
             } else if (!hasCameraPermission) {
-                // Request Permission Screen
                 Column(
                     modifier = Modifier
                         .fillMaxSize()
@@ -195,17 +183,14 @@ fun CameraScanScreen(
                     }
                 }
             } else {
-                // Main Camera View with alignment guides
                 Box(modifier = Modifier.fillMaxSize()) {
                     CameraPreview(
                         imageCapture = imageCapture,
                         modifier = Modifier.fillMaxSize()
                     )
 
-                    // Guidelines overlay
                     CameraOverlay(modifier = Modifier.fillMaxSize())
 
-                    // Error text if fails
                     errorMessage?.let { error ->
                         Box(
                             modifier = Modifier
@@ -223,7 +208,6 @@ fun CameraScanScreen(
                         }
                     }
 
-                    // Bottom controls panel
                     Column(
                         modifier = Modifier
                             .align(Alignment.BottomCenter)
@@ -233,7 +217,6 @@ fun CameraScanScreen(
                         horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.spacedBy(16.dp)
                     ) {
-                        // Demo mode helper tip
                         if (isMockMode) {
                             Row(
                                 modifier = Modifier
@@ -262,7 +245,6 @@ fun CameraScanScreen(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.SpaceAround
                         ) {
-                            // Empty box or Demo trigger
                             if (isMockMode) {
                                 OutlinedButton(
                                     onClick = { showDemoSelector = !showDemoSelector },
@@ -275,21 +257,16 @@ fun CameraScanScreen(
                                 Box(modifier = Modifier.width(100.dp))
                             }
 
-                            // Capture trigger
                             Surface(
                                 modifier = Modifier
                                     .size(72.dp)
                                     .clip(CircleShape)
                                     .clickable {
                                         if (isMockMode) {
-                                            // Trigger random mock if click capture in mock mode
                                             triggerMockAnalysis(
                                                 "healthy",
                                                 repository,
                                                 coroutineScope,
-                                                context,
-                                                useGemma,
-                                                gemmaModelPath,
                                                 onAnalysisComplete
                                             )
                                         } else {
@@ -326,13 +303,22 @@ fun CameraScanScreen(
                                                             if (gemmaModelPath.isBlank()) {
                                                                 throw Exception("Gemma 모델 경로가 설정되지 않았습니다. 설정에서 경로를 지정해 주세요.")
                                                             }
-                                                            capturedFileForGemma = file
-                                                            capturedBitmapForGemma = bitmap
-                                                            selectedSymptoms.clear()
-                                                            selectedSymptoms.addAll(extractSymptomsFromBitmap(bitmap))
-                                                            showSymptomSelectorDialog = true
+                                                            coroutineScope.launch {
+                                                                try {
+                                                                    val result = com.example.nailnutri.analysis.GemmaAnalyzer.analyzeNail(
+                                                                        context = context,
+                                                                        bitmap = bitmap,
+                                                                        modelPath = gemmaModelPath,
+                                                                        imagePath = file.absolutePath
+                                                                    )
+                                                                    repository.saveResult(result)
+                                                                    onAnalysisComplete(result.id)
+                                                                } catch (e: Exception) {
+                                                                    errorMessage = e.message ?: "온디바이스 분석 중 오류 발생"
+                                                                    analyzing = false
+                                                                }
+                                                            }
                                                         } else {
-                                                            analyzing = true
                                                             coroutineScope.launch {
                                                                 try {
                                                                     if (apiKey.isBlank()) {
@@ -368,7 +354,7 @@ fun CameraScanScreen(
                             ) {
                                 Box(contentAlignment = Alignment.Center) {
                                     Icon(
-                                        Icons.Default.CameraAlt, 
+                                        Icons.Default.CameraAlt,
                                         contentDescription = "Capture",
                                         tint = Color.Black,
                                         modifier = Modifier.size(28.dp)
@@ -380,7 +366,6 @@ fun CameraScanScreen(
                         }
                     }
 
-                    // Demo select panel
                     if (isMockMode && showDemoSelector) {
                         DemoSelectorPanel(
                             modifier = Modifier
@@ -391,15 +376,11 @@ fun CameraScanScreen(
                                 analyzing = true
                                 showDemoSelector = false
                                 coroutineScope.launch {
-                                    // Delay slightly to show visual scanning transition
                                     kotlinx.coroutines.delay(1500)
                                     triggerMockAnalysis(
                                         condition,
                                         repository,
                                         coroutineScope,
-                                        context,
-                                        useGemma,
-                                        gemmaModelPath,
                                         onAnalysisComplete
                                     )
                                 }
@@ -408,123 +389,6 @@ fun CameraScanScreen(
                     }
                 }
             }
-        }
-
-        // Symptom Selector Dialog for Gemma
-        if (showSymptomSelectorDialog && capturedFileForGemma != null && capturedBitmapForGemma != null) {
-            val availableSymptoms = listOf(
-                "손톱 표면의 흰 반점 (Leukonychia)",
-                "세로줄 현상 (Vertical Ridges)",
-                "숟가락 모양 굽어짐 (Koilonychia)",
-                "손톱 갈라짐 및 깨짐 (Onychorrhexis)"
-            )
-
-            AlertDialog(
-                onDismissRequest = {
-                    showSymptomSelectorDialog = false
-                    capturedFileForGemma = null
-                    capturedBitmapForGemma = null
-                },
-                title = { Text("관찰되는 손톱 증상 확인", fontWeight = FontWeight.Bold) },
-                text = {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .verticalScroll(rememberScrollState()),
-                        verticalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
-                        Text(
-                            text = "온디바이스 Gemma 모델 분석을 위해, 촬영하신 이미지에서 식별되는 손톱 증상을 체크해 주세요.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
-                            modifier = Modifier.padding(bottom = 6.dp)
-                        )
-
-                        // Basic status info
-                        val initialSymptom = extractSymptomsFromBitmap(capturedBitmapForGemma!!)
-                        Text(
-                            text = "💡 이미지 분석 기본 혈색: ${initialSymptom.first()}",
-                            style = MaterialTheme.typography.bodySmall,
-                            fontWeight = FontWeight.Bold,
-                            color = NutriGreen,
-                            modifier = Modifier.padding(bottom = 8.dp)
-                        )
-
-                        availableSymptoms.forEach { symptom ->
-                            val isChecked = selectedSymptoms.contains(symptom)
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clickable {
-                                        if (isChecked) {
-                                            selectedSymptoms.remove(symptom)
-                                        } else {
-                                            selectedSymptoms.add(symptom)
-                                        }
-                                    }
-                                    .padding(vertical = 6.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Checkbox(
-                                    checked = isChecked,
-                                    onCheckedChange = { checked ->
-                                        if (checked) {
-                                            selectedSymptoms.add(symptom)
-                                        } else {
-                                            selectedSymptoms.remove(symptom)
-                                        }
-                                    }
-                                )
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text(text = symptom, style = MaterialTheme.typography.bodyMedium)
-                            }
-                        }
-                    }
-                },
-                confirmButton = {
-                    Button(
-                        onClick = {
-                            showSymptomSelectorDialog = false
-                            analyzing = true
-                            
-                            val finalSymptoms = selectedSymptoms.toList()
-                            val finalFile = capturedFileForGemma!!
-                            
-                            coroutineScope.launch {
-                                try {
-                                    val result = com.example.nailnutri.analysis.GemmaAnalyzer.analyzeSymptoms(
-                                        context = context,
-                                        symptoms = if (finalSymptoms.isEmpty()) listOf("특이사항 없음 (건강함)") else finalSymptoms,
-                                        modelPath = gemmaModelPath,
-                                        imagePath = finalFile.absolutePath
-                                    )
-                                    repository.saveResult(result)
-                                    onAnalysisComplete(result.id)
-                                } catch (e: Exception) {
-                                    errorMessage = e.message ?: "온디바이스 분석 중 오류 발생"
-                                    analyzing = false
-                                } finally {
-                                    capturedFileForGemma = null
-                                    capturedBitmapForGemma = null
-                                }
-                            }
-                        }
-                    ) {
-                        Text("분석 시작")
-                    }
-                },
-                dismissButton = {
-                    TextButton(
-                        onClick = {
-                            showSymptomSelectorDialog = false
-                            capturedFileForGemma = null
-                            capturedBitmapForGemma = null
-                        }
-                    ) {
-                        Text("취소")
-                    }
-                }
-            )
         }
     }
 }
@@ -570,13 +434,11 @@ fun CameraOverlay(modifier: Modifier = Modifier) {
         val width = size.width
         val height = size.height
 
-        // Define card target dimensions
         val cardWidth = width * 0.5f
         val cardHeight = cardWidth * 1.5f
         val xOffset = (width - cardWidth) / 2
         val yOffset = (height - cardHeight) / 2
 
-        // Draw transparent black around target area
         val outerPath = Path().apply {
             addRect(
                 androidx.compose.ui.geometry.Rect(0f, 0f, width, height)
@@ -595,7 +457,6 @@ fun CameraOverlay(modifier: Modifier = Modifier) {
             )
         }
 
-        // Clip difference to overlay dim background
         val resultPath = Path.combine(
             androidx.compose.ui.graphics.PathOperation.Difference,
             outerPath,
@@ -607,7 +468,6 @@ fun CameraOverlay(modifier: Modifier = Modifier) {
             color = Color.Black.copy(alpha = 0.5f)
         )
 
-        // Draw green target borders
         drawRoundRect(
             color = NutriGreen,
             topLeft = androidx.compose.ui.geometry.Offset(xOffset, yOffset),
@@ -732,39 +592,11 @@ private fun triggerMockAnalysis(
     condition: String,
     repository: DataRepository,
     coroutineScope: CoroutineScope,
-    context: Context,
-    useGemma: Boolean,
-    gemmaModelPath: String,
     onAnalysisComplete: (String) -> Unit
 ) {
     coroutineScope.launch {
         val dateStr = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault()).format(Date())
         val mockId = UUID.randomUUID().toString()
-
-        // If Gemma mode is active and model path is configured, query the local Gemma model
-        if (useGemma && gemmaModelPath.isNotBlank()) {
-            val mockSymptoms = when (condition) {
-                "healthy" -> listOf("특이사항 없음 (건강함)")
-                "white_spots" -> listOf("손톱 표면의 흰 반점 (Leukonychia)")
-                "vertical_ridges" -> listOf("세로줄 현상 (Vertical Ridges)")
-                "spoon_nails" -> listOf("숟가락 모양 굽어짐 (Koilonychia)")
-                "brittle" -> listOf("손톱 갈라짐 및 깨짐 (Onychorrhexis)")
-                else -> listOf("일반적인 손톱 홈")
-            }
-            try {
-                val result = com.example.nailnutri.analysis.GemmaAnalyzer.analyzeSymptoms(
-                    context = context,
-                    symptoms = mockSymptoms,
-                    modelPath = gemmaModelPath,
-                    imagePath = "demo_$condition"
-                )
-                repository.saveResult(result)
-                onAnalysisComplete(result.id)
-                return@launch
-            } catch (e: Exception) {
-                // Fallback to local hardcoded mock data if Gemma model loading fails
-            }
-        }
 
         val result = when (condition) {
             "healthy" -> NailAnalysisResult(
@@ -845,40 +677,6 @@ private fun triggerMockAnalysis(
         repository.saveResult(result)
         onAnalysisComplete(result.id)
     }
-}
-
-private fun extractSymptomsFromBitmap(bitmap: Bitmap): List<String> {
-    var rSum = 0.0
-    var gSum = 0.0
-    var bSum = 0.0
-    val width = bitmap.width
-    val height = bitmap.height
-    val step = 10
-    var count = 0
-    
-    for (x in 0 until width step step) {
-        for (y in 0 until height step step) {
-            val pixel = bitmap.getPixel(x, y)
-            rSum += android.graphics.Color.red(pixel)
-            gSum += android.graphics.Color.green(pixel)
-            bSum += android.graphics.Color.blue(pixel)
-            count++
-        }
-    }
-    
-    val rAvg = rSum / count
-    val gAvg = gSum / count
-    val bAvg = bSum / count
-    
-    val symptoms = mutableListOf<String>()
-    
-    if (rAvg > 0 && (gAvg + bAvg) / (2 * rAvg) > 0.85) {
-        symptoms.add("창백한 조갑상상 (Pale Nail Bed)")
-    } else {
-        symptoms.add("일반적인 손톱 표면 무늬 (Common Ridges)")
-    }
-    
-    return symptoms
 }
 
 private fun cropNailRegion(bitmap: Bitmap): Bitmap {
