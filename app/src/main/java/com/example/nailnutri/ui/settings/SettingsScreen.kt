@@ -1,6 +1,7 @@
 package com.example.nailnutri.ui.settings
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -40,16 +41,17 @@ fun SettingsScreen(
     val apiKey by repository.apiKey.collectAsStateWithLifecycle(initialValue = "")
     val isMockMode by repository.isMockMode.collectAsStateWithLifecycle(initialValue = true)
     val useGemma by repository.useGemma.collectAsStateWithLifecycle(initialValue = false)
+    val useOnDeviceVision by repository.useOnDeviceVision.collectAsStateWithLifecycle(initialValue = false)
     val gemmaModelPath by repository.gemmaModelPath.collectAsStateWithLifecycle(initialValue = "/data/local/tmp/gemma.bin")
     
     var inputKey by remember(apiKey) { mutableStateOf(apiKey) }
     var mockEnabled by remember(isMockMode) { mutableStateOf(isMockMode) }
-    var gemmaActive by remember(useGemma) { mutableStateOf(useGemma) }
     var modelPathInput by remember(gemmaModelPath) { mutableStateOf(gemmaModelPath) }
     var keyVisible by remember { mutableStateOf(false) }
     var testResult by remember { mutableStateOf<String?>(null) }
     var testingConnection by remember { mutableStateOf(false) }
     var modelValidationResult by remember { mutableStateOf<String?>(null) }
+    var tfliteAssetValidation by remember { mutableStateOf<String?>(null) }
     var isDownloading by remember { mutableStateOf(false) }
     var downloadProgress by remember { mutableStateOf(0f) }
     var downloadError by remember { mutableStateOf<String?>(null) }
@@ -124,7 +126,6 @@ fun SettingsScreen(
                 }
             }
 
-            // Gemma On-Device Switch Card
             Card(
                 shape = RoundedCornerShape(16.dp),
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
@@ -135,39 +136,114 @@ fun SettingsScreen(
                     modifier = Modifier.padding(16.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
+                    Text(
+                        text = "AI 분석 엔진 선택",
+                        style = MaterialTheme.typography.titleMedium
+                    )
+                    Text(
+                        text = "손톱 진단에 사용할 추론 엔진을 설정합니다.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                    )
+                    
+                    Spacer(modifier = Modifier.height(4.dp))
+                    
+                    // Option 1: Cloud Gemini
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Column(modifier = Modifier.weight(1.5f)) {
-                            Text(
-                                text = "온디바이스 Gemma LLM 사용",
-                                style = MaterialTheme.typography.titleMedium
-                            )
-                            Text(
-                                text = "활성화 시 인터넷 연결 없이 기기에서 Gemma 모델을 사용하여 진단 피드백을 생성합니다. 비활성화 시 클라우드 Gemini API를 사용합니다.",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
-                                modifier = Modifier.padding(top = 4.dp)
-                            )
-                        }
-                        Switch(
-                            checked = gemmaActive,
-                            onCheckedChange = {
-                                gemmaActive = it
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable {
                                 coroutineScope.launch {
-                                    repository.setUseGemma(it)
-                                    snackbarHostState.showSnackbar(
-                                        if (it) "온디바이스 Gemma 분석이 설정되었습니다." else "클라우드 Gemini 분석이 설정되었습니다."
-                                    )
+                                    repository.setUseGemma(false)
+                                    repository.setUseOnDeviceVision(false)
+                                    snackbarHostState.showSnackbar("클라우드 Gemini 분석 모드가 설정되었습니다.")
+                                }
+                            }
+                            .padding(vertical = 8.dp)
+                    ) {
+                        RadioButton(
+                            selected = !useGemma && !useOnDeviceVision,
+                            onClick = {
+                                coroutineScope.launch {
+                                    repository.setUseGemma(false)
+                                    repository.setUseOnDeviceVision(false)
+                                    snackbarHostState.showSnackbar("클라우드 Gemini 분석 모드가 설정되었습니다.")
                                 }
                             }
                         )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Column {
+                            Text("클라우드 Gemini API (멀티모달)", style = MaterialTheme.typography.bodyLarge)
+                            Text("가장 정밀하고 정확한 영양 분석 (API 키 입력 필요)", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
+                        }
+                    }
+
+                    // Option 2: On-Device TFLite (Visual)
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                coroutineScope.launch {
+                                    repository.setUseGemma(false)
+                                    repository.setUseOnDeviceVision(true)
+                                    snackbarHostState.showSnackbar("온디바이스 TFLite 비전 모드가 설정되었습니다.")
+                                }
+                            }
+                            .padding(vertical = 8.dp)
+                    ) {
+                        RadioButton(
+                            selected = !useGemma && useOnDeviceVision,
+                            onClick = {
+                                coroutineScope.launch {
+                                    repository.setUseGemma(false)
+                                    repository.setUseOnDeviceVision(true)
+                                    snackbarHostState.showSnackbar("온디바이스 TFLite 비전 모드가 설정되었습니다.")
+                                }
+                            }
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Column {
+                            Text("온디바이스 TFLite (경량 비전 모델)", style = MaterialTheme.typography.bodyLarge)
+                            Text("오프라인 작동, 100% 로컬 이미지 분류 (Gemma-free)", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
+                        }
+                    }
+
+                    // Option 3: On-Device Gemma (LLM)
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                coroutineScope.launch {
+                                    repository.setUseGemma(true)
+                                    repository.setUseOnDeviceVision(false)
+                                    snackbarHostState.showSnackbar("온디바이스 Gemma LLM 분석 모드가 설정되었습니다.")
+                                }
+                            }
+                            .padding(vertical = 8.dp)
+                    ) {
+                        RadioButton(
+                            selected = useGemma && !useOnDeviceVision,
+                            onClick = {
+                                coroutineScope.launch {
+                                    repository.setUseGemma(true)
+                                    repository.setUseOnDeviceVision(false)
+                                    snackbarHostState.showSnackbar("온디바이스 Gemma LLM 분석 모드가 설정되었습니다.")
+                                }
+                            }
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Column {
+                            Text("온디바이스 Gemma LLM (대용량 텍스트 모델)", style = MaterialTheme.typography.bodyLarge)
+                            Text("오프라인 작동, Gemma 1.4GB 무거운 로컬 텍스트 모델 사용", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
+                        }
                     }
                 }
             }
 
-            if (!gemmaActive) {
+            if (!useGemma && !useOnDeviceVision) {
                 // Gemini API Key Section
                 Card(
                     shape = RoundedCornerShape(16.dp),
@@ -288,7 +364,79 @@ fun SettingsScreen(
                         }
                     }
                 }
-            } else {
+            }
+
+            if (!useGemma && useOnDeviceVision) {
+                // TFLite On-Device Section
+                Card(
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(
+                        modifier = Modifier.padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(16.dp)
+                    ) {
+                        Text(
+                            text = "온디바이스 TFLite 모델 정보",
+                            style = MaterialTheme.typography.titleMedium
+                        )
+
+                        Text(
+                            text = "로컬 이미지 분류를 위해 'nail_symptom_classifier.tflite' 모델 파일이 앱 패키지(assets/) 내부에 내장되어 있어야 합니다.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f)
+                        )
+
+                        Button(
+                            onClick = {
+                                try {
+                                    context.assets.open("nail_symptom_classifier.tflite").use { input ->
+                                        val sizeBytes = input.available()
+                                        if (sizeBytes > 50) {
+                                            tfliteAssetValidation = "내장 모델 파일 검증 성공! 크기: ${sizeBytes} bytes"
+                                        } else {
+                                            tfliteAssetValidation = "주의: 파일이 존재하지만 임시 플레이스홀더 파일 상태입니다. (크기: ${sizeBytes} bytes)\nFallback 시뮬레이션 진단 로직이 활성화됩니다."
+                                        }
+                                    }
+                                } catch (e: Exception) {
+                                    tfliteAssetValidation = "에러: assets/nail_symptom_classifier.tflite 파일을 열 수 없습니다: ${e.message}"
+                                }
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text("내장 에셋 검증하기")
+                        }
+
+                        tfliteAssetValidation?.let { result ->
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .background(
+                                        if (result.contains("성공")) 
+                                            MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.2f) 
+                                        else 
+                                            MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.2f),
+                                        shape = RoundedCornerShape(8.dp)
+                                    )
+                                    .padding(12.dp)
+                            ) {
+                                Text(
+                                    text = result,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = if (result.contains("성공"))
+                                        MaterialTheme.colorScheme.primary
+                                    else
+                                        MaterialTheme.colorScheme.error
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
+            if (useGemma && !useOnDeviceVision) {
                 // Gemma On-Device Section
                 Card(
                     shape = RoundedCornerShape(16.dp),
@@ -341,7 +489,7 @@ fun SettingsScreen(
                             Column(
                                 modifier = Modifier.fillMaxWidth(),
                                 verticalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
+                              ) {
                                 LinearProgressIndicator(
                                     progress = { downloadProgress },
                                     modifier = Modifier.fillMaxWidth()

@@ -17,6 +17,7 @@ interface DataRepository {
     val isMockMode: Flow<Boolean>
     val gemmaModelPath: Flow<String>
     val useGemma: Flow<Boolean>
+    val useOnDeviceVision: Flow<Boolean>
 
     suspend fun saveResult(result: NailAnalysisResult)
     suspend fun clearHistory()
@@ -25,6 +26,7 @@ interface DataRepository {
     suspend fun setMockMode(enabled: Boolean)
     suspend fun setGemmaModelPath(path: String)
     suspend fun setUseGemma(enabled: Boolean)
+    suspend fun setUseOnDeviceVision(enabled: Boolean)
 }
 
 class DefaultDataRepository(context: Context) : DataRepository {
@@ -46,6 +48,9 @@ class DefaultDataRepository(context: Context) : DataRepository {
     private val _useGemma = MutableStateFlow(false)
     override val useGemma = _useGemma.asStateFlow()
 
+    private val _useOnDeviceVision = MutableStateFlow(false)
+    override val useOnDeviceVision = _useOnDeviceVision.asStateFlow()
+
     // Temporary compatibility data flow
     override val data: Flow<List<String>> = flowFromHistory()
 
@@ -66,6 +71,7 @@ class DefaultDataRepository(context: Context) : DataRepository {
         _isMockMode.value = prefs.getBoolean("is_mock_mode", true)
         _gemmaModelPath.value = prefs.getString("gemma_model_path", "/data/local/tmp/gemma.bin") ?: "/data/local/tmp/gemma.bin"
         _useGemma.value = prefs.getBoolean("use_gemma", false)
+        _useOnDeviceVision.value = prefs.getBoolean("use_on_device_vision", false)
     }
 
     private fun flowFromHistory(): Flow<List<String>> = kotlinx.coroutines.flow.flow {
@@ -110,6 +116,11 @@ class DefaultDataRepository(context: Context) : DataRepository {
     override suspend fun setUseGemma(enabled: Boolean) {
         prefs.edit().putBoolean("use_gemma", enabled).apply()
         _useGemma.value = enabled
+    }
+
+    override suspend fun setUseOnDeviceVision(enabled: Boolean) {
+        prefs.edit().putBoolean("use_on_device_vision", enabled).apply()
+        _useOnDeviceVision.value = enabled
     }
 
     private fun saveHistoryList(list: List<NailAnalysisResult>) {

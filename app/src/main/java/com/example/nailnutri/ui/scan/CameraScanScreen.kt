@@ -71,6 +71,7 @@ fun CameraScanScreen(
     val isMockMode by repository.isMockMode.collectAsStateWithLifecycle(initialValue = true)
     val apiKey by repository.apiKey.collectAsStateWithLifecycle(initialValue = "")
     val useGemma by repository.useGemma.collectAsStateWithLifecycle(initialValue = false)
+    val useOnDeviceVision by repository.useOnDeviceVision.collectAsStateWithLifecycle(initialValue = false)
     val gemmaModelPath by repository.gemmaModelPath.collectAsStateWithLifecycle(initialValue = "/data/local/tmp/gemma.bin")
 
     var hasCameraPermission by remember {
@@ -270,7 +271,7 @@ fun CameraScanScreen(
                                                 onAnalysisComplete
                                             )
                                         } else {
-                                            if (!useGemma && apiKey.isBlank()) {
+                                            if (!useGemma && !useOnDeviceVision && apiKey.isBlank()) {
                                                 errorMessage =
                                                     "Gemini API 키가 없습니다. 설정에서 키를 등록하거나 데모 모드를 활성화해주세요."
                                                 return@clickable
@@ -299,7 +300,22 @@ fun CameraScanScreen(
                                                             e.printStackTrace()
                                                         }
 
-                                                        if (useGemma) {
+                                                        if (useOnDeviceVision) {
+                                                            coroutineScope.launch {
+                                                                try {
+                                                                    val result = com.example.nailnutri.analysis.NailClassifier.classify(
+                                                                        context = context,
+                                                                        bitmap = bitmap,
+                                                                        imagePath = file.absolutePath
+                                                                    )
+                                                                    repository.saveResult(result)
+                                                                    onAnalysisComplete(result.id)
+                                                                } catch (e: Exception) {
+                                                                    errorMessage = e.message ?: "로컬 비전 분석 중 오류 발생"
+                                                                    analyzing = false
+                                                                }
+                                                            }
+                                                        } else if (useGemma) {
                                                             if (gemmaModelPath.isBlank()) {
                                                                 throw Exception("Gemma 모델 경로가 설정되지 않았습니다. 설정에서 경로를 지정해 주세요.")
                                                             }
