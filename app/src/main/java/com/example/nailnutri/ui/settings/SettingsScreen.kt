@@ -51,7 +51,6 @@ fun SettingsScreen(
     var testResult by remember { mutableStateOf<String?>(null) }
     var testingConnection by remember { mutableStateOf(false) }
     var modelValidationResult by remember { mutableStateOf<String?>(null) }
-    var tfliteAssetValidation by remember { mutableStateOf<String?>(null) }
     var isDownloading by remember { mutableStateOf(false) }
     var downloadProgress by remember { mutableStateOf(0f) }
     var downloadError by remember { mutableStateOf<String?>(null) }
@@ -367,7 +366,6 @@ fun SettingsScreen(
             }
 
             if (!useGemma && useOnDeviceVision) {
-                // TFLite On-Device Section
                 Card(
                     shape = RoundedCornerShape(16.dp),
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
@@ -379,59 +377,15 @@ fun SettingsScreen(
                         verticalArrangement = Arrangement.spacedBy(16.dp)
                     ) {
                         Text(
-                            text = "온디바이스 TFLite 모델 정보",
+                            text = "온디바이스 비전 분석 모드",
                             style = MaterialTheme.typography.titleMedium
                         )
 
                         Text(
-                            text = "로컬 이미지 분류를 위해 'nail_symptom_classifier.tflite' 모델 파일이 앱 패키지(assets/) 내부에 내장되어 있어야 합니다.",
+                            text = "로컬에서 이미지의 색상/질감 특징을 추출하여 영양 상태를 분석합니다. 별도의 모델 파일이 필요하지 않습니다.",
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f)
                         )
-
-                        Button(
-                            onClick = {
-                                try {
-                                    context.assets.open("nail_symptom_classifier.tflite").use { input ->
-                                        val sizeBytes = input.available()
-                                        if (sizeBytes > 50) {
-                                            tfliteAssetValidation = "내장 모델 파일 검증 성공! 크기: ${sizeBytes} bytes"
-                                        } else {
-                                            tfliteAssetValidation = "주의: 파일이 존재하지만 임시 플레이스홀더 파일 상태입니다. (크기: ${sizeBytes} bytes)\nFallback 시뮬레이션 진단 로직이 활성화됩니다."
-                                        }
-                                    }
-                                } catch (e: Exception) {
-                                    tfliteAssetValidation = "에러: assets/nail_symptom_classifier.tflite 파일을 열 수 없습니다: ${e.message}"
-                                }
-                            },
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Text("내장 에셋 검증하기")
-                        }
-
-                        tfliteAssetValidation?.let { result ->
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .background(
-                                        if (result.contains("성공")) 
-                                            MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.2f) 
-                                        else 
-                                            MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.2f),
-                                        shape = RoundedCornerShape(8.dp)
-                                    )
-                                    .padding(12.dp)
-                            ) {
-                                Text(
-                                    text = result,
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = if (result.contains("성공"))
-                                        MaterialTheme.colorScheme.primary
-                                    else
-                                        MaterialTheme.colorScheme.error
-                                )
-                            }
-                        }
                     }
                 }
             }

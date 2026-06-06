@@ -2,15 +2,9 @@ package com.example.nailnutri.analysis
 
 import android.content.Context
 import android.graphics.Bitmap
-import android.util.Log
 import com.example.nailnutri.data.NailAnalysisResult
 import com.example.nailnutri.data.NutrientDetail
 import com.example.nailnutri.data.SufficientNutrientDetail
-import com.google.mediapipe.tasks.core.BaseOptions
-import com.google.mediapipe.tasks.vision.core.RunningMode
-import com.google.mediapipe.tasks.vision.imageclassifier.ImageClassifier
-import com.google.mediapipe.tasks.vision.imageclassifier.ImageClassifier.ImageClassifierOptions
-import com.google.mediapipe.tasks.vision.imageclassifier.ImageClassifierResult
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -18,84 +12,34 @@ import java.util.UUID
 
 object NailClassifier {
     private const val TAG = "NailClassifier"
-    private const val MODEL_ASSET_PATH = "nail_symptom_classifier.tflite"
-
-    private var classifier: ImageClassifier? = null
-    private var initializationError = false
-
-    private fun getClassifier(context: Context): ImageClassifier? {
-        if (classifier != null) return classifier
-        if (initializationError) return null
-
-        try {
-            val baseOptions = BaseOptions.builder()
-                .setModelAssetPath(MODEL_ASSET_PATH)
-                .build()
-            val options = ImageClassifierOptions.builder()
-                .setBaseOptions(baseOptions)
-                .setRunningMode(RunningMode.IMAGE)
-                .setMaxResults(1)
-                .setScoreThreshold(0.2f)
-                .build()
-            classifier = ImageClassifier.createFromOptions(context, options)
-            Log.d(TAG, "Successfully initialized MediaPipe ImageClassifier")
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to initialize MediaPipe ImageClassifier, falling back: ${e.message}", e)
-            initializationError = true
-        }
-        return classifier
-    }
 
     fun classify(context: Context, bitmap: Bitmap, imagePath: String): NailAnalysisResult {
-        val imageClassifier = getClassifier(context)
-        
-        var topCategory: String? = null
-        var confidence = 0f
+        val features = NailFeatureExtractor.extract(bitmap)
 
-        if (imageClassifier != null) {
-            try {
-                val mpImage = com.google.mediapipe.framework.image.BitmapImageBuilder(bitmap).build()
-                val result: ImageClassifierResult = imageClassifier.classify(mpImage)
-                val classificationResult = result.classificationResult()
-                if (classificationResult != null && classificationResult.classifications().isNotEmpty()) {
-                    val classification = classificationResult.classifications()[0]
-                    if (classification.categories().isNotEmpty()) {
-                        val category = classification.categories()[0]
-                        topCategory = category.categoryName()
-                        confidence = category.score()
-                        Log.d(TAG, "Inference completed: $topCategory (confidence: $confidence)")
-                    }
-                }
-            } catch (e: Exception) {
-                Log.e(TAG, "Inference failed, falling back: ${e.message}", e)
-            }
-        } else {
-            Log.w(TAG, "Classifier not initialized, executing fallback simulation")
-        }
-
-        val condition = topCategory ?: run {
-            val time = System.currentTimeMillis()
-            val conditions = listOf("healthy", "white_spots", "vertical_ridges", "brittle")
-            val selected = conditions[(time % conditions.size).toInt()]
-            Log.d(TAG, "Fallback condition selected: $selected")
-            selected
+        val condition = when {
+            features.hasWhiteSpots -> "white_spots"
+            features.isUnevenTexture -> "vertical_ridges"
+            features.isDarkEdges -> "spoon_nails"
+            features.isPale || features.isLowRedness -> "brittle"
+            else -> "healthy"
         }
 
         return buildResultFromCondition(condition, imagePath)
     }
 
-    private fun buildResultFromCondition(condition: String, imagePath: String): NailAnalysisResult {
+    private fun buildResultFromCondition(
+        condition: String,
+        imagePath: String
+    ): NailAnalysisResult {
         val dateStr = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault()).format(Date())
         val mockId = UUID.randomUUID().toString()
-
-        val warningSuffix = if (initializationError) " (온디바이스 비전 모델 미설치로 임시 분석 결과가 반환되었습니다)" else ""
 
         return when (condition.lowercase(Locale.ROOT)) {
             "healthy" -> NailAnalysisResult(
                 id = mockId,
                 date = dateStr,
                 imagePath = imagePath,
-                symptoms = listOf("특이사항 없음 (건강함)$warningSuffix"),
+                symptoms = listOf("특이사항 없음 (건강함)"),
                 deficientNutrients = emptyList(),
                 sufficientNutrients = listOf(
                     SufficientNutrientDetail("단백질 (Keratin)", "손톱 표면이 매끄럽고 윤기가 있어 충분한 단백질 공급을 보입니다.", "손톱의 기본 구조 형성에 기여"),
@@ -109,7 +53,7 @@ object NailClassifier {
                 id = mockId,
                 date = dateStr,
                 imagePath = imagePath,
-                symptoms = listOf("손톱 표면의 흰 반점 (Leukonychia)$warningSuffix"),
+                symptoms = listOf("손톱 표면의 흰 반점 (Leukonychia)"),
                 deficientNutrients = listOf(
                     NutrientDetail("아연 (Zinc)", "Severe", "손톱 중간에 산발적인 흰 반점이 나타나는 것은 세포 분열과 단백질 합성을 돕는 아연의 결핍을 강하게 시사합니다.", listOf("굴", "소고기", "호박씨", "아몬드")),
                     NutrientDetail("칼슘 (Calcium)", "Moderate", "가로방향의 흰색 띠가 발견되는 경우 칼슘 결핍이나 대사 스트레스 상태일 수 있습니다.", listOf("우유", "치즈", "멸치", "두부"))
@@ -124,7 +68,7 @@ object NailClassifier {
                 id = mockId,
                 date = dateStr,
                 imagePath = imagePath,
-                symptoms = listOf("세로줄 현상 (Vertical Ridges)$warningSuffix"),
+                symptoms = listOf("세로줄 현상 (Vertical Ridges)"),
                 deficientNutrients = listOf(
                     NutrientDetail("비타민 B12", "Moderate", "세로 방향으로 깊게 파인 줄은 비타민 B12 결핍으로 인한 손톱 세포 성장 둔화를 나타낼 수 있습니다.", listOf("육류", "달걀", "연어", "유제품")),
                     NutrientDetail("마그네슘 (Magnesium)", "Moderate", "손톱 표면의 세로 홈과 울퉁불퉁함은 신체 대사를 돕는 마그네슘 부족과 연관될 수 있습니다.", listOf("시금치", "바나나", "아보카도", "다크 초콜릿"))
@@ -135,11 +79,25 @@ object NailClassifier {
                 ),
                 overallAdvice = "노화의 자연스러운 현상일 수도 있지만, 비타민 B12와 마그네슘 부족도 큰 원인이 됩니다. 잡곡밥, 녹색 채소, 그리고 적당한 고기류가 포함된 식단이 권장됩니다."
             )
+            "spoon_nails" -> NailAnalysisResult(
+                id = mockId,
+                date = dateStr,
+                imagePath = imagePath,
+                symptoms = listOf("숟가락 모양 굽어짐 (Koilonychia)"),
+                deficientNutrients = listOf(
+                    NutrientDetail("철분 (Iron)", "Severe", "손톱 끝이 뒤집어지고 가운데가 움푹 파여 숟가락 모양을 띠는 현상은 대표적인 철분 결핍성 빈혈의 주요 증상입니다. 빠른 철분 보충이 필요합니다.", listOf("붉은 고기", "시금치", "렌틸콩", "조개류")),
+                    NutrientDetail("단백질 (Protein)", "Moderate", "손톱 판이 얇아지고 쉽게 구부러지는 것은 기본 구성 물질인 단백질 부족을 뜻합니다.", listOf("닭가슴살", "달걀", "두부", "생선"))
+                ),
+                sufficientNutrients = listOf(
+                    SufficientNutrientDetail("칼슘", "손톱 표면이 전반적으로 깨끗하며 칼슘 분배는 양호합니다.", "골격 및 네일 강도 유지")
+                ),
+                overallAdvice = "숟가락 모양의 손톱(Koilonychia)은 심각한 철분 부족 빈혈의 신호일 수 있습니다. 붉은 고기와 녹색 잎채소를 다량 섭취하시고 철분의 흡수율을 높이기 위해 비타민 C와 함께 복용하는 것을 강력히 권장합니다."
+            )
             "brittle" -> NailAnalysisResult(
                 id = mockId,
                 date = dateStr,
                 imagePath = imagePath,
-                symptoms = listOf("손톱 갈라짐 및 깨짐 (Onychorrhexis)$warningSuffix"),
+                symptoms = listOf("손톱 갈라짐 및 깨짐 (Onychorrhexis)"),
                 deficientNutrients = listOf(
                     NutrientDetail("비오틴 (Biotin)", "Severe", "손톱이 메마르고 건조하며 끝부분이 갈라지고 부서지는 증상은 각질 구조를 단단히 하는 비오틴(비타민 B7) 결핍과 관련이 큽니다.", listOf("계란 노른자", "견과류", "콜리플라워", "고구마")),
                     NutrientDetail("수분/필수지방산", "Moderate", "손톱의 탄력을 잃고 껍질처럼 벗겨지는 현상은 필수 지방산(오메가-3) 및 수분 부족 증상입니다.", listOf("들기름", "연어", "호두", "물 하루 8잔"))
@@ -153,7 +111,7 @@ object NailClassifier {
                 id = mockId,
                 date = dateStr,
                 imagePath = imagePath,
-                symptoms = listOf("기타 상태 식별$warningSuffix"),
+                symptoms = listOf("기타 상태 식별"),
                 deficientNutrients = listOf(
                     NutrientDetail("철분 (Iron)", "Moderate", "분석 결과 미세한 철분 부족 신호가 감지되었습니다.", listOf("붉은 고기", "시금치", "두부"))
                 ),
