@@ -305,7 +305,10 @@ internal object NailFeatureExtractor {
         }
 
         val sampleStep = max(1, min(width, height) / 80)
-        val pixels = ArrayList<Int>((width / sampleStep + 1) * (height / sampleStep + 1))
+        val xSteps = (width - 1) / sampleStep + 1
+        val ySteps = (height - 1) / sampleStep + 1
+        val totalSamples = xSteps * ySteps
+        val pixels = ArrayList<Int>(totalSamples)
 
         var rSum = 0.0
         var gSum = 0.0
@@ -314,7 +317,6 @@ internal object NailFeatureExtractor {
         var sSum = 0.0
         var whiteCount = 0
         var darkEdgeCount = 0
-        val totalSamples = (width / sampleStep) * (height / sampleStep)
         var brightnessValues = DoubleArray(totalSamples)
         var redValues = DoubleArray(totalSamples)
         var idx = 0
@@ -347,8 +349,8 @@ internal object NailFeatureExtractor {
                 if (hsv[2] > 0.85f && hsv[1] < 0.18f) {
                     whiteCount++
                 }
-                val isEdge = x < edgeThreshold || x > width - edgeThreshold ||
-                        y < edgeThreshold || y > height - edgeThreshold
+                val isEdge = x < edgeThreshold || x >= width - edgeThreshold ||
+                        y < edgeThreshold || y >= height - edgeThreshold
                 if (isEdge && r < darkEdgeThreshold && g < darkEdgeThreshold && b < darkEdgeThreshold) {
                     darkEdgeCount++
                 }
@@ -367,11 +369,11 @@ internal object NailFeatureExtractor {
         val brightnessStdDev = stdDev(brightnessValues, totalSamples, avgV)
         val rednessStdDev = stdDev(redValues, totalSamples, avgR)
 
-        val isLowRedness = avgR < 130 && (avgR > avgB * 0.95)
+        val isDarkEdges = darkEdgeRatio > 0.30
+        val isLowRedness = avgR < 130 && !isDarkEdges && (avgR > avgB * 0.95 || avgR < 100.0)
         val isPale = avgS < 0.22 && avgV > 0.45 && avgR < 200
         val hasWhiteSpots = whiteSpotRatio > 0.012
-        val isDarkEdges = darkEdgeRatio > 0.18
-        val isUnevenTexture = brightnessStdDev > 22 || rednessStdDev > 35
+        val isUnevenTexture = ((brightnessStdDev * 255.0) > 22 || rednessStdDev > 35) && !isDarkEdges
 
         return NailFeatures(
             averageRedness = avgR,
