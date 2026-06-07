@@ -9,9 +9,6 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.encodeToString
 
 interface DataRepository {
-    // Keep compatibility with template's simple data flow if needed, but we will replace its usage.
-    val data: Flow<List<String>>
-
     val history: Flow<List<NailAnalysisResult>>
     val apiKey: Flow<String>
     val isMockMode: Flow<Boolean>
@@ -51,9 +48,6 @@ class DefaultDataRepository(context: Context) : DataRepository {
     private val _useOnDeviceVision = MutableStateFlow(false)
     override val useOnDeviceVision = _useOnDeviceVision.asStateFlow()
 
-    // Temporary compatibility data flow
-    override val data: Flow<List<String>> = flowFromHistory()
-
     init {
         loadData()
     }
@@ -72,12 +66,6 @@ class DefaultDataRepository(context: Context) : DataRepository {
         _gemmaModelPath.value = prefs.getString("gemma_model_path", "/data/local/tmp/gemma.bin") ?: "/data/local/tmp/gemma.bin"
         _useGemma.value = prefs.getBoolean("use_gemma", false)
         _useOnDeviceVision.value = prefs.getBoolean("use_on_device_vision", false)
-    }
-
-    private fun flowFromHistory(): Flow<List<String>> = kotlinx.coroutines.flow.flow {
-        history.collect { list ->
-            emit(list.map { "${it.date}: ${it.symptoms.joinToString()}" })
-        }
     }
 
     override suspend fun saveResult(result: NailAnalysisResult) {

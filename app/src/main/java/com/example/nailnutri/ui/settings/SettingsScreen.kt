@@ -7,7 +7,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Visibility
@@ -16,7 +16,6 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
@@ -64,7 +63,7 @@ fun SettingsScreen(
                 title = { Text("설정") },
                 navigationIcon = {
                     IconButton(onClick = onBackClick) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "뒤로가기")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "뒤로가기")
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
@@ -382,7 +381,7 @@ fun SettingsScreen(
                         )
 
                         Text(
-                            text = "로컬에서 이미지의 색상/질감 특징을 추출하여 영양 상태를 분석합니다. 별도의 모델 파일이 필요하지 않습니다.",
+                            text = "Kagle 데이터셋으로 학습된 TFLite 모델을 우선 사용하며, 모델이 없으면 로컬 색상/질감 특징 분석으로 대체합니다.",
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f)
                         )
@@ -638,24 +637,25 @@ private suspend fun downloadGemmaModel(
         }
 
         val fileLength = connection.contentLengthLong
-        val input = connection.inputStream
-        val output = FileOutputStream(targetFile)
 
-        val data = ByteArray(16384) // 16KB buffer
-        var total: Long = 0
-        var count: Int
-        
-        while (input.read(data).also { count = it } != -1) {
-            total += count
-            if (fileLength > 0) {
-                onProgress(total.toFloat() / fileLength.toFloat())
+        connection.inputStream.use { input ->
+            FileOutputStream(targetFile).use { output ->
+                val data = ByteArray(16384) // 16KB buffer
+                var total: Long = 0
+                var count: Int
+
+                while (input.read(data).also { count = it } != -1) {
+                    total += count
+                    if (fileLength > 0) {
+                        onProgress(total.toFloat() / fileLength.toFloat())
+                    }
+                    output.write(data, 0, count)
+                }
+
+                output.flush()
             }
-            output.write(data, 0, count)
         }
 
-        output.flush()
-        output.close()
-        input.close()
         onComplete(targetFile.absolutePath)
     } catch (e: java.io.IOException) {
         if (targetFile.exists()) {

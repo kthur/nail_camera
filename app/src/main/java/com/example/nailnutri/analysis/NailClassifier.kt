@@ -11,29 +11,72 @@ import java.util.Locale
 import java.util.UUID
 
 object NailClassifier {
-    private const val TAG = "NailClassifier"
 
-    fun classify(context: Context, bitmap: Bitmap, imagePath: String): NailAnalysisResult {
-        val features = NailFeatureExtractor.extract(bitmap)
-
-        val condition = when {
-            features.hasWhiteSpots -> "white_spots"
-            features.isUnevenTexture -> "vertical_ridges"
-            features.isDarkEdges -> "spoon_nails"
-            features.isPale || features.isLowRedness -> "brittle"
-            else -> "healthy"
+    fun classify(bitmap: Bitmap, imagePath: String, context: Context? = null): NailAnalysisResult {
+        if (context != null) {
+            try {
+                if (TFLiteClassifier.load(context)) {
+                    val (label, confidence) = TFLiteClassifier.getTopPrediction(bitmap)
+                    if (confidence > 0.5f) {
+                        val condition = TFLiteClassifier.mapToCondition(label)
+                        val dateStr = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault()).format(Date())
+                        val mockId = UUID.randomUUID().toString()
+                        return buildSingleConditionResult(condition, imagePath, dateStr, mockId)
+                    }
+                }
+            } catch (_: Exception) { }
         }
-
-        return buildResultFromCondition(condition, imagePath)
+        val features = NailFeatureExtractor.extract(bitmap)
+        return buildResultFromFeatures(features, imagePath)
     }
 
-    private fun buildResultFromCondition(
-        condition: String,
-        imagePath: String
-    ): NailAnalysisResult {
+    fun buildResultForCondition(condition: String, imagePath: String): NailAnalysisResult {
+        val dateStr = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault()).format(Date())
+        val mockId = UUID.randomUUID().toString()
+        return buildSingleConditionResult(condition, imagePath, dateStr, mockId)
+    }
+
+    private fun buildResultFromFeatures(features: NailFeatures, imagePath: String): NailAnalysisResult {
         val dateStr = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault()).format(Date())
         val mockId = UUID.randomUUID().toString()
 
+        val activeConditions = mutableListOf<String>()
+        if (features.hasWhiteSpots) activeConditions.add("white_spots")
+        if (features.isUnevenTexture) activeConditions.add("vertical_ridges")
+        if (features.isDarkEdges) activeConditions.add("spoon_nails")
+        if (features.isPale || features.isLowRedness) activeConditions.add("brittle")
+        if (activeConditions.isEmpty()) activeConditions.add("healthy")
+
+        val results = activeConditions.map { buildSingleConditionResult(it, imagePath, dateStr, mockId) }
+
+        val allSymptoms = results.flatMap { it.symptoms }.distinct()
+        val seenNutrients = mutableSetOf<String>()
+        val combinedDeficient = results.flatMap { r ->
+            r.deficientNutrients.filter { seenNutrients.add(it.name) }
+        }
+        val seenSufficient = mutableSetOf<String>()
+        val combinedSufficient = results.flatMap { r ->
+            r.sufficientNutrients.filter { seenSufficient.add(it.name) }
+        }
+        val combinedAdvice = results.joinToString("\n\n") { it.overallAdvice }
+
+        return NailAnalysisResult(
+            id = mockId,
+            date = dateStr,
+            imagePath = imagePath,
+            symptoms = allSymptoms.ifEmpty { listOf("특이사항 없음 (건강함)") },
+            deficientNutrients = combinedDeficient,
+            sufficientNutrients = combinedSufficient,
+            overallAdvice = combinedAdvice
+        )
+    }
+
+    private fun buildSingleConditionResult(
+        condition: String,
+        imagePath: String,
+        dateStr: String,
+        mockId: String
+    ): NailAnalysisResult {
         return when (condition.lowercase(Locale.ROOT)) {
             "healthy" -> NailAnalysisResult(
                 id = mockId,

@@ -300,25 +300,21 @@ internal object NailFeatureExtractor {
     fun extract(bitmap: Bitmap): NailFeatures {
         val width = bitmap.width
         val height = bitmap.height
-        if (width == 0 || height == 0) {
-            return defaultFeatures()
-        }
+        if (width == 0 || height == 0) return defaultFeatures()
+
+        val allPixels = IntArray(width * height)
+        bitmap.getPixels(allPixels, 0, width, 0, 0, width, height)
 
         val sampleStep = max(1, min(width, height) / 80)
         val xSteps = (width - 1) / sampleStep + 1
         val ySteps = (height - 1) / sampleStep + 1
         val totalSamples = xSteps * ySteps
-        val pixels = ArrayList<Int>(totalSamples)
 
-        var rSum = 0.0
-        var gSum = 0.0
-        var bSum = 0.0
-        var vSum = 0.0
-        var sSum = 0.0
-        var whiteCount = 0
+        var rSum = 0.0; var gSum = 0.0; var bSum = 0.0
+        var vSum = 0.0; var sSum = 0.0
         var darkEdgeCount = 0
-        var brightnessValues = DoubleArray(totalSamples)
-        var redValues = DoubleArray(totalSamples)
+        val brightnessValues = DoubleArray(totalSamples)
+        val redValues = DoubleArray(totalSamples)
         var idx = 0
 
         val edgeThreshold = (width * 0.12).toInt().coerceAtLeast(2)
@@ -326,19 +322,13 @@ internal object NailFeatureExtractor {
 
         for (x in 0 until width step sampleStep) {
             for (y in 0 until height step sampleStep) {
-                val pixel = bitmap.getPixel(x, y)
-                val r = Color.red(pixel)
-                val g = Color.green(pixel)
-                val b = Color.blue(pixel)
-
-                rSum += r
-                gSum += g
-                bSum += b
+                val pixel = allPixels[y * width + x]
+                val r = Color.red(pixel); val g = Color.green(pixel); val b = Color.blue(pixel)
+                rSum += r; gSum += g; bSum += b
 
                 val hsv = FloatArray(3)
                 Color.RGBToHSV(r, g, b, hsv)
-                sSum += hsv[1]
-                vSum += hsv[2]
+                sSum += hsv[1]; vSum += hsv[2]
 
                 if (idx < totalSamples) {
                     brightnessValues[idx] = hsv[2].toDouble()
@@ -346,14 +336,9 @@ internal object NailFeatureExtractor {
                 }
                 idx++
 
-                if (hsv[2] > 0.85f && hsv[1] < 0.18f) {
-                    whiteCount++
-                }
                 val isEdge = x < edgeThreshold || x >= width - edgeThreshold ||
                         y < edgeThreshold || y >= height - edgeThreshold
-                if (isEdge && r < darkEdgeThreshold && g < darkEdgeThreshold && b < darkEdgeThreshold) {
-                    darkEdgeCount++
-                }
+                if (isEdge && r < darkEdgeThreshold && g < darkEdgeThreshold && b < darkEdgeThreshold) darkEdgeCount++
             }
         }
 
@@ -363,7 +348,18 @@ internal object NailFeatureExtractor {
         val avgB = bSum / sampleCount
         val avgS = sSum / sampleCount
         val avgV = vSum / sampleCount
-        val whiteSpotRatio = whiteCount.toDouble() / sampleCount
+
+        // Adaptive white spot detection using brightness percentile
+        val sortedBrightness = brightnessValues.take(sampleCount).sorted()
+        val p90 = sortedBrightness[(sortedBrightness.size * 0.90).toInt().coerceAtMost(sortedBrightness.size - 1)]
+        val p25 = sortedBrightness[(sortedBrightness.size * 0.25).toInt().coerceAtMost(sortedBrightness.size - 1)]
+        val p75 = sortedBrightness[(sortedBrightness.size * 0.75).toInt().coerceAtMost(sortedBrightness.size - 1)]
+        val brightnessRange = p90 - p25
+        // Pixels significantly brighter than normal (3x the interquartile range above p75)
+        val whiteThreshold = p75 + brightnessRange * 2.0
+        val whiteCount = sortedBrightness.count { it > whiteThreshold.coerceAtMost(0.95) }
+        val whiteSpotRatio = whiteCount.toDouble() / sortedBrightness.size
+
         val darkEdgeRatio = darkEdgeCount.toDouble() / sampleCount
 
         val brightnessStdDev = stdDev(brightnessValues, totalSamples, avgV)
@@ -372,21 +368,17 @@ internal object NailFeatureExtractor {
         val isDarkEdges = darkEdgeRatio > 0.30
         val isLowRedness = avgR < 130 && !isDarkEdges && (avgR > avgB * 0.95 || avgR < 100.0)
         val isPale = avgS < 0.22 && avgV > 0.45 && avgR < 200
-        val hasWhiteSpots = whiteSpotRatio > 0.012
-        val isUnevenTexture = ((brightnessStdDev * 255.0) > 22 || rednessStdDev > 35) && !isDarkEdges
+        val hasWhiteSpots = whiteSpotRatio > 0.015
+
+        val normalizedTextureScore = if (avgV > 0.01) brightnessStdDev / avgV else brightnessStdDev * 255.0
+        val isUnevenTexture = (normalizedTextureScore > 0.15 || rednessStdDev > 35) && !isDarkEdges
 
         return NailFeatures(
-            averageRedness = avgR,
-            averageSaturation = avgS,
-            averageBrightness = avgV,
-            whiteSpotRatio = whiteSpotRatio,
-            darkEdgeRatio = darkEdgeRatio,
-            brightnessStdDev = brightnessStdDev,
-            rednessUniformity = rednessStdDev,
-            isPale = isPale,
-            hasWhiteSpots = hasWhiteSpots,
-            isDarkEdges = isDarkEdges,
-            isUnevenTexture = isUnevenTexture,
+            averageRedness = avgR, averageSaturation = avgS, averageBrightness = avgV,
+            whiteSpotRatio = whiteSpotRatio, darkEdgeRatio = darkEdgeRatio,
+            brightnessStdDev = brightnessStdDev, rednessUniformity = rednessStdDev,
+            isPale = isPale, hasWhiteSpots = hasWhiteSpots,
+            isDarkEdges = isDarkEdges, isUnevenTexture = isUnevenTexture,
             isLowRedness = isLowRedness
         )
     }
