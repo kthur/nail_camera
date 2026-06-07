@@ -165,30 +165,32 @@ configurations.all {
 // ---------------------------------------------------------------------------
 // Build-time task: train nail classifier model from Kaggle dataset
 // ---------------------------------------------------------------------------
-val nailModelFile = layout.projectDirectory.file("src/main/assets/nail_classifier.tflite")
+val modelTflite = layout.projectDirectory.file("src/main/assets/nail_classifier.tflite").asFile.absolutePath
+val modelScript = file("../scripts/train_nail_model.py").absolutePath
+val projectDir = rootProject.projectDir.absolutePath
+
 val nailModelTask = tasks.register("trainNailModel") {
     description = "Download nail dataset from Kaggle and train TFLite model"
     group = "build"
-    val modelPath = nailModelFile.asFile.absolutePath
-    val scriptPath = layout.projectDirectory.file("../scripts/train_nail_model.py").asFile.absolutePath
+    inputs.file(modelScript)
+    outputs.file(modelTflite)
     doLast {
-        val model = File(modelPath)
-        if (model.exists()) {
-            logger.lifecycle("Nail model already exists at ${model.absolutePath}, skipping training.")
+        if (File(modelTflite).exists()) {
+            logger.lifecycle("Nail model already exists at $modelTflite, skipping training.")
             logger.lifecycle("  Use --force to retrain, or delete the file manually.")
         } else {
             logger.lifecycle("Training nail classifier model from Kaggle dataset...")
             logger.lifecycle("  (Requires Python 3.8+ with tensorflow, kagglehub, pillow)")
             val pythonCmd = if (System.getProperty("os.name").lowercase().contains("windows")) "python" else "python3"
-            val proc = ProcessBuilder(pythonCmd, scriptPath)
-                .directory(rootProject.projectDir)
+            val proc = ProcessBuilder(pythonCmd, modelScript)
+                .directory(File(projectDir))
                 .inheritIO()
                 .start()
             val exitCode = proc.waitFor()
             if (exitCode != 0) {
                 logger.warn("Model training exited with code $exitCode.")
                 logger.warn("  The app will fall back to the rule-based classifier.")
-            } else if (model.exists()) {
+            } else if (File(modelTflite).exists()) {
                 logger.lifecycle("Nail classifier model trained successfully!")
             }
         }
