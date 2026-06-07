@@ -168,7 +168,7 @@ configurations.all {
 val nailModelTask = tasks.register("trainNailModel") {
     description = "Download nail dataset from Kaggle and train TFLite model"
     group = "build"
-    notCompatibleWithConfigurationCache()
+    notCompatibleWithConfigurationCache("runs external Python script for ML model training")
     doLast {
         val projectDir = project.projectDir
         val tfliteFile = File(projectDir, "src/main/assets/nail_classifier.tflite")
