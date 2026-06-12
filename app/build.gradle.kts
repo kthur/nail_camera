@@ -2,11 +2,14 @@ import java.io.ByteArrayOutputStream
 import java.net.URI
 import java.util.zip.ZipEntry
 import java.util.zip.ZipInputStream
+import com.google.firebase.appdistribution.gradle.firebaseAppDistribution
 
 plugins {
   alias(libs.plugins.android.application)
   alias(libs.plugins.compose.compiler)
   alias(libs.plugins.kotlin.serialization)
+  alias(libs.plugins.google.services)
+  alias(libs.plugins.firebase.appdistribution)
 }
 
 android {
@@ -37,6 +40,17 @@ android {
             isMinifyEnabled = false
             signingConfig = signingConfigs["debugSign"]
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+            firebaseAppDistribution {
+                artifactType = "APK"
+                testers = "tester@example.com"
+            }
+        }
+        debug {
+            signingConfig = signingConfigs["debugSign"]
+            firebaseAppDistribution {
+                artifactType = "APK"
+                testers = "tester@example.com"
+            }
         }
     }
     compileOptions {

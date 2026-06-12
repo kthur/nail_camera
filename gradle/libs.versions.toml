@@ -16,6 +16,8 @@ lifecycleViewmodelNav3 = "2.10.0"
 camerax = "1.3.4"
 generativeai = "0.9.0"
 mediapipeTasksGenai = "0.10.14"
+googleServices = "4.4.2"
+firebaseAppDistribution = "5.2.1"
 
 
 [libraries]
@@ -52,3 +54,5 @@ mediapipe-tasks-genai = { module = "com.google.mediapipe:tasks-genai", version.r
 android-application = { id = "com.android.application", version.ref = "androidGradlePlugin" }
 compose-compiler = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
 kotlin-serialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin" }
+google-services = { id = "com.google.gms.google-services", version.ref = "googleServices" }
+firebase-appdistribution = { id = "com.google.firebase.appdistribution", version.ref = "firebaseAppDistribution" }
