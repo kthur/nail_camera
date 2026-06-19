@@ -37,6 +37,14 @@ public class Bitmap {
         pixels[x][y] = color;
     }
 
+    public void getPixels(int[] pixels, int offset, int stride, int x, int y, int width, int height) {
+        for (int j = 0; j < height; j++) {
+            for (int i = 0; i < width; i++) {
+                pixels[offset + j * stride + i] = this.pixels[x + i][y + j];
+            }
+        }
+    }
+
     public static Bitmap createBitmap(int width, int height, Config config) {
         return new Bitmap(width, height);
     }

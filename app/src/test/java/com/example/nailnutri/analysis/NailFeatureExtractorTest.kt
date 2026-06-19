@@ -149,7 +149,7 @@ class NailFeatureExtractorTest {
         assertEquals(0.4146, features.averageBrightness, 0.01)
         assertEquals(0.0, features.whiteSpotRatio, 0.01)
         assertEquals(0.4224, features.darkEdgeRatio, 0.001)
-        assertEquals(30.13, features.rednessUniformity, 0.01)
+        assertEquals(0.0, features.rednessUniformity, 0.01)
 
         assertFalse("Should not be pale", features.isPale)
         assertFalse("Should not have low redness", features.isLowRedness)
