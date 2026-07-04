@@ -16,3 +16,11 @@ local.properties
 .agents/
 .kotlin/
 ORIGINAL_REQUEST.md
+
+# Python
+venv/
+datasets/
+.cache/
+scripts/__pycache__/
+scripts/healthy_vis.png
+tmp/

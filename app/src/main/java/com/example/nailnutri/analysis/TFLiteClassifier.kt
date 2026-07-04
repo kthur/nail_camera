@@ -2,8 +2,9 @@ package com.example.nailnutri.analysis
 
 import android.content.Context
 import android.graphics.Bitmap
-import android.graphics.BitmapFactory
 import org.tensorflow.lite.Interpreter
+import org.tensorflow.lite.gpu.GpuDelegate
+import com.example.nailnutri.util.ModelVersionProvider
 import java.io.File
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
@@ -19,8 +20,11 @@ object TFLiteClassifier {
     fun load(context: Context): Boolean {
         if (isLoaded) return true
         try {
-            val modelBuffer = loadModelFile(context)
-            interpreter = Interpreter(modelBuffer)
+            val modelPath = ModelVersionProvider.getModelPath(context)
+            val modelBuffer = loadModelFile(context, modelPath)
+            val options = Interpreter.Options()
+            options.addDelegate(GpuDelegate())
+            interpreter = Interpreter(modelBuffer, options)
             labels = loadLabels(context)
             isLoaded = true
             return true
@@ -58,8 +62,8 @@ object TFLiteClassifier {
         }
     }
 
-    private fun loadModelFile(context: Context): MappedByteBuffer {
-        val afd = context.assets.openFd("nail_classifier.tflite")
+    private fun loadModelFile(context: Context, modelPath: String): MappedByteBuffer {
+        val afd = context.assets.openFd(modelPath)
         val inputStream = afd.createInputStream()
         val fileChannel = inputStream.channel
         val startOffset = afd.startOffset

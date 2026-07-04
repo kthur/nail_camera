@@ -42,6 +42,9 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.compose.ui.graphics.PathEffect
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.StrokeJoin
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.nailnutri.analysis.GeminiAnalyzer
@@ -52,6 +55,8 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import java.io.File
 import java.util.concurrent.Executor
+import kotlin.coroutines.resume
+import kotlin.coroutines.resumeWithException
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -91,6 +96,7 @@ fun CameraScanScreen(
     var analyzing by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var showDemoSelector by remember { mutableStateOf(true) }
+    var showInconsistencyDialog by remember { mutableStateOf(false) }
     val imageCapture = remember { ImageCapture.Builder().build() }
 
     LaunchedEffect(flashEnabled) {
@@ -278,12 +284,21 @@ fun CameraScanScreen(
                                             }
                                             analyzing = true
                                             errorMessage = null
-                                            captureImage(
-                                                imageCapture,
-                                                context,
-                                                ContextCompat.getMainExecutor(context),
-                                                onSuccess = { file ->
-                                                    try {
+                                            coroutineScope.launch {
+                                                try {
+                                                    val executor = ContextCompat.getMainExecutor(context)
+                                                    val files = mutableListOf<File>()
+                                                    // 1. 3장 연속 촬영 (250ms 간격)
+                                                    for (i in 1..3) {
+                                                        val file = captureImageAsync(imageCapture, context, executor, i)
+                                                        files.add(file)
+                                                        kotlinx.coroutines.delay(250)
+                                                    }
+
+                                                    // 2. 각 이미지 해상도 조정 및 자르기 진행
+                                                    val conditions = mutableListOf<String>()
+                                                    val processedBitmaps = mutableListOf<Bitmap>()
+                                                    for (file in files) {
                                                         val boundsOptions = BitmapFactory.Options().apply { inJustDecodeBounds = true }
                                                         BitmapFactory.decodeFile(file.absolutePath, boundsOptions)
                                                         val maxDim = maxOf(boundsOptions.outWidth, boundsOptions.outHeight)
@@ -301,73 +316,67 @@ fun CameraScanScreen(
                                                         if (rotatedBitmap != rawBitmap) {
                                                             rawBitmap.recycle()
                                                         }
-                                                        if (bitmap != rotatedBitmap) {
-                                                            rotatedBitmap.recycle()
+                                                        processedBitmaps.add(bitmap)
+                                                        
+                                                        // 3. 판독 라벨 산출
+                                                        val cond = getPrimaryCondition(bitmap, context)
+                                                        conditions.add(cond)
+                                                    }
+
+                                                    // 4. 일관성 검사 및 다수결 판단
+                                                    val condCounts = conditions.groupingBy { it }.eachCount()
+                                                    val maxEntry = condCounts.maxByOrNull { it.value }
+
+                                                    if (maxEntry != null && maxEntry.value >= 2) {
+                                                        // 통과: 다수결에 해당하는 최종 1장 정보 추출
+                                                        val finalCondition = maxEntry.key
+                                                        val targetIndex = conditions.indexOf(finalCondition)
+                                                        val finalBitmap = processedBitmaps[targetIndex]
+                                                        val finalFile = files[targetIndex]
+
+                                                        // 사용하지 않는 이미지 자원 해제
+                                                        processedBitmaps.forEachIndexed { idx, bmp ->
+                                                            if (idx != targetIndex) bmp.recycle()
                                                         }
 
+                                                        // 최종 1회 정밀 분석 수행
                                                         if (useOnDeviceVision) {
-                                                            coroutineScope.launch {
-                                                                try {
-                                                                    val result = com.example.nailnutri.analysis.NailClassifier.classify(
-                                                                        bitmap = bitmap,
-                                                                        imagePath = file.absolutePath,
-                                                                        context = context
-                                                                    )
-                                                                    repository.saveResult(result)
-                                                                    onAnalysisComplete(result.id)
-                                                                } catch (e: Exception) {
-                                                                    errorMessage = e.message ?: "로컬 비전 분석 중 오류 발생"
-                                                                    analyzing = false
-                                                                }
-                                                            }
+                                                            val result = com.example.nailnutri.analysis.NailClassifier.classify(
+                                                                bitmap = finalBitmap,
+                                                                imagePath = finalFile.absolutePath,
+                                                                context = context
+                                                            )
+                                                            repository.saveResult(result)
+                                                            onAnalysisComplete(result.id)
                                                         } else if (useGemma) {
-                                                            if (gemmaModelPath.isBlank()) {
-                                                                throw Exception("Gemma 모델 경로가 설정되지 않았습니다. 설정에서 경로를 지정해 주세요.")
-                                                            }
-                                                            coroutineScope.launch {
-                                                                try {
-                                                                    val result = com.example.nailnutri.analysis.GemmaAnalyzer.analyzeNail(
-                                                                        context = context,
-                                                                        bitmap = bitmap,
-                                                                        modelPath = gemmaModelPath,
-                                                                        imagePath = file.absolutePath
-                                                                    )
-                                                                    repository.saveResult(result)
-                                                                    onAnalysisComplete(result.id)
-                                                                } catch (e: Exception) {
-                                                                    errorMessage = e.message ?: "온디바이스 분석 중 오류 발생"
-                                                                    analyzing = false
-                                                                }
-                                                            }
+                                                            val result = com.example.nailnutri.analysis.GemmaAnalyzer.analyzeNail(
+                                                                context = context,
+                                                                bitmap = finalBitmap,
+                                                                modelPath = gemmaModelPath,
+                                                                imagePath = finalFile.absolutePath
+                                                            )
+                                                            repository.saveResult(result)
+                                                            onAnalysisComplete(result.id)
                                                         } else {
-                                                            coroutineScope.launch {
-                                                                try {
-                                                                    if (apiKey.isBlank()) {
-                                                                        throw Exception("Gemini API 키가 없습니다. 설정에서 키를 등록하거나 데모 모드를 활성화해주세요.")
-                                                                    }
-                                                                    val result = GeminiAnalyzer.analyzeNail(
-                                                                        bitmap = bitmap,
-                                                                        apiKey = apiKey,
-                                                                        imagePath = file.absolutePath
-                                                                    )
-                                                                    repository.saveResult(result)
-                                                                    onAnalysisComplete(result.id)
-                                                                } catch (e: Exception) {
-                                                                    errorMessage = e.message ?: "분석 중 오류 발생"
-                                                                    analyzing = false
-                                                                }
-                                                            }
+                                                            val result = GeminiAnalyzer.analyzeNail(
+                                                                bitmap = finalBitmap,
+                                                                apiKey = apiKey,
+                                                                imagePath = finalFile.absolutePath
+                                                            )
+                                                            repository.saveResult(result)
+                                                            onAnalysisComplete(result.id)
                                                         }
-                                                    } catch (e: Exception) {
-                                                        errorMessage = e.message ?: "이미지 파일 로드 실패"
+                                                    } else {
+                                                        // 모두 불합치: 자원 해제 및 팝업 안내
+                                                        processedBitmaps.forEach { it.recycle() }
+                                                        showInconsistencyDialog = true
                                                         analyzing = false
                                                     }
-                                                },
-                                                onError = { exc ->
-                                                    errorMessage = "촬영 실패: ${exc.message}"
+                                                } catch (e: Exception) {
+                                                    errorMessage = e.message ?: "촬영 및 분석 중 오류 발생"
                                                     analyzing = false
                                                 }
-                                            )
+                                            }
                                         }
                                     },
                                 color = Color.White,
@@ -385,6 +394,19 @@ fun CameraScanScreen(
 
                             Box(modifier = Modifier.width(100.dp))
                         }
+                    }
+
+                    if (showInconsistencyDialog) {
+                        AlertDialog(
+                            onDismissRequest = { showInconsistencyDialog = false },
+                            title = { Text("판독 일관성 부족") },
+                            text = { Text("3회 촬영된 이미지 간 판독 결과가 상이하여 분석을 완료하지 못했습니다. 손가락 가이드라인에 맞추어 다시 촬영해 주세요.") },
+                            confirmButton = {
+                                Button(onClick = { showInconsistencyDialog = false }) {
+                                    Text("확인")
+                                }
+                            }
+                        )
                     }
 
                     if (isMockMode && showDemoSelector) {
@@ -495,6 +517,71 @@ fun CameraOverlay(modifier: Modifier = Modifier) {
             size = androidx.compose.ui.geometry.Size(cardWidth, cardHeight),
             cornerRadius = CornerRadius(24.dp.toPx(), 24.dp.toPx()),
             style = Stroke(width = 3.dp.toPx())
+        )
+
+        // 1. 손가락 실루엣 (점선)
+        val fingerPath = Path().apply {
+            moveTo(xOffset + cardWidth * 0.2f, yOffset + cardHeight)
+            quadraticBezierTo(
+                xOffset + cardWidth * 0.2f, yOffset + cardHeight * 0.3f,
+                xOffset + cardWidth * 0.5f, yOffset + cardHeight * 0.25f
+            )
+            quadraticBezierTo(
+                xOffset + cardWidth * 0.8f, yOffset + cardHeight * 0.3f,
+                xOffset + cardWidth * 0.8f, yOffset + cardHeight * 0.9f
+            )
+            lineTo(xOffset + cardWidth * 0.8f, yOffset + cardHeight)
+        }
+        drawPath(
+            path = fingerPath,
+            color = Color.White.copy(alpha = 0.6f),
+            style = Stroke(
+                width = 2.dp.toPx(),
+                pathEffect = PathEffect.dashPathEffect(floatArrayOf(10f, 10f), 0f)
+            )
+        )
+
+        // 2. 손톱 가이드라인 (녹색 실선)
+        val nailPath = Path().apply {
+            val nailLeft = xOffset + cardWidth * 0.35f
+            val nailRight = xOffset + cardWidth * 0.65f
+            val nailTop = yOffset + cardHeight * 0.33f
+            val nailBottom = yOffset + cardHeight * 0.55f
+            
+            moveTo(nailLeft, nailBottom)
+            quadraticBezierTo(
+                nailLeft - 5f, nailTop + 15f,
+                xOffset + cardWidth * 0.5f, nailTop
+            )
+            quadraticBezierTo(
+                nailRight + 5f, nailTop + 15f,
+                nailRight, nailBottom
+            )
+            quadraticBezierTo(
+                xOffset + cardWidth * 0.5f, nailBottom - 10f,
+                nailLeft, nailBottom
+            )
+        }
+        drawPath(
+            path = nailPath,
+            color = NutriGreen,
+            style = Stroke(width = 2.5.dp.toPx())
+        )
+
+        // 3. 방향 화살표 (↑)
+        val arrowPath = Path().apply {
+            val arrowX = xOffset + cardWidth * 0.5f
+            val arrowY = yOffset + cardHeight * 0.72f
+            moveTo(arrowX, arrowY)
+            lineTo(arrowX, arrowY - 40f)
+            moveTo(arrowX - 15f, arrowY - 25f)
+            lineTo(arrowX, arrowY - 40f)
+            lineTo(arrowX + 15f, arrowY - 25f)
+        }
+        drawPath(
+            path = arrowPath,
+            color = NutriGreen,
+            style = Stroke(width = 3.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
         )
     }
 
@@ -662,5 +749,45 @@ private fun rotateBitmapIfRequired(bitmap: Bitmap, path: String): Bitmap {
     } catch (e: Exception) {
         e.printStackTrace()
         bitmap
+    }
+}
+
+private suspend fun captureImageAsync(
+    imageCapture: ImageCapture,
+    context: Context,
+    executor: Executor,
+    index: Int
+): File = kotlin.coroutines.suspendCoroutine { continuation ->
+    val outputDirectory = context.cacheDir
+    val photoFile = File(
+        outputDirectory,
+        "nail_capture_${System.currentTimeMillis()}_$index.jpg"
+    )
+    val outputOptions = ImageCapture.OutputFileOptions.Builder(photoFile).build()
+
+    imageCapture.takePicture(
+        outputOptions,
+        executor,
+        object : ImageCapture.OnImageSavedCallback {
+            override fun onImageSaved(outputFileResults: ImageCapture.OutputFileResults) {
+                continuation.resume(photoFile)
+            }
+            override fun onError(exception: ImageCaptureException) {
+                continuation.resumeWithException(exception)
+            }
+        }
+    )
+}
+
+private fun getPrimaryCondition(bitmap: Bitmap, context: Context): String {
+    return try {
+        val result = com.example.nailnutri.analysis.NailClassifier.classify(
+            bitmap = bitmap,
+            imagePath = "",
+            context = context
+        )
+        result.symptoms.firstOrNull() ?: "NORMAL"
+    } catch (e: Exception) {
+        "NORMAL"
     }
 }

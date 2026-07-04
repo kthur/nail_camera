@@ -1,0 +1,11 @@
+{
+  "normal": "NORMAL",
+  "healthy": "NORMAL",
+  "onychomycosis": "ONYCHOMYCOSIS",
+  "fungal_infection": "ONYCHOMYCOSIS",
+  "pallor": "PALLOR",
+  "pale": "PALLOR",
+  "discoloration": "DISCOLORATION",
+  "pigmentation": "DISCOLORATION",
+  "unknown": "UNKNOWN"
+}

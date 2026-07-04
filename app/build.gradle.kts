@@ -1,7 +1,3 @@
-import java.io.ByteArrayOutputStream
-import java.net.URI
-import java.util.zip.ZipEntry
-import java.util.zip.ZipInputStream
 import com.google.firebase.appdistribution.gradle.firebaseAppDistribution
 
 plugins {
@@ -128,43 +124,16 @@ dependencies {
   // MediaPipe GenAI Tasks (Gemma)
   implementation(libs.mediapipe.tasks.genai)
 
-// TFLite: use full AAR for runtime + extracted API JAR (no manifest) for compilation
-// to avoid AGP 9.x manifest-namespace conflict between tensorflow-lite and tensorflow-lite-api.
+// TFLite: Use compileOnly for tensorflow-lite-api to bypass AGP 9.x manifest namespace conflicts during merger.
 val tfliteVersion = "2.15.0"
-val extractTfliteApi by tasks.registering {
-    val outputJar = layout.buildDirectory.file("tflite/tensorflow-lite-api.jar")
-    outputs.file(outputJar)
-    doLast {
-        val aarUrl = URI("https://repo1.maven.org/maven2/org/tensorflow/tensorflow-lite-api/$tfliteVersion/tensorflow-lite-api-$tfliteVersion.aar").toURL()
-        val jarFile = outputJar.get().asFile
-        jarFile.parentFile.mkdirs()
-        val jarBytes = ByteArrayOutputStream()
-        aarUrl.openStream().use { input ->
-            val buf = ByteArray(8192)
-            val zis = ZipInputStream(input)
-            var entry: ZipEntry? = zis.nextEntry
-            while (entry != null) {
-                if (entry.name == "classes.jar") {
-                    var len = zis.read(buf)
-                    while (len != -1) {
-                        jarBytes.write(buf, 0, len)
-                        len = zis.read(buf)
-                    }
-                    break
-                }
-                entry = zis.nextEntry
-            }
-            zis.close()
-        }
-        jarFile.writeBytes(jarBytes.toByteArray())
-        check(jarFile.exists()) { "Failed to extract classes.jar from tensorflow-lite-api AAR" }
-    }
-}
 dependencies {
     implementation("org.tensorflow:tensorflow-lite:$tfliteVersion") {
         exclude(group = "org.tensorflow", module = "tensorflow-lite-api")
     }
-    implementation(files(extractTfliteApi.map { it.outputs.files.singleFile }))
+    implementation("org.tensorflow:tensorflow-lite-gpu:$tfliteVersion") {
+        exclude(group = "org.tensorflow", module = "tensorflow-lite-api")
+    }
+    compileOnly("org.tensorflow:tensorflow-lite-api:$tfliteVersion")
 }
 
 // The guice dependency pulled by TFLite requires minSdk 26
