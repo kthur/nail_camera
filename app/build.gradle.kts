@@ -124,17 +124,8 @@ dependencies {
   // MediaPipe GenAI Tasks (Gemma)
   implementation(libs.mediapipe.tasks.genai)
 
-// TFLite: Use compileOnly for tensorflow-lite-api to bypass AGP 9.x manifest namespace conflicts during merger.
-val tfliteVersion = "2.15.0"
-dependencies {
-    implementation("org.tensorflow:tensorflow-lite:$tfliteVersion") {
-        exclude(group = "org.tensorflow", module = "tensorflow-lite-api")
-    }
-    implementation("org.tensorflow:tensorflow-lite-gpu:$tfliteVersion") {
-        exclude(group = "org.tensorflow", module = "tensorflow-lite-api")
-    }
-    compileOnly("org.tensorflow:tensorflow-lite-api:$tfliteVersion")
-}
+  // TFLite: Use pre-extracted classes.jar files from libs/ to bypass AGP 9.x manifest namespace conflicts
+  implementation(fileTree(mapOf("dir" to "libs", "include" to listOf("*.jar"))))
 
 // The guice dependency pulled by TFLite requires minSdk 26
 configurations.all {
@@ -182,3 +173,4 @@ val nailModelTask = tasks.register("trainNailModel") {
 tasks.matching { it.name.startsWith("merge") && it.name.endsWith("Assets") }.configureEach {
     dependsOn(nailModelTask)
 }
+
