@@ -96,7 +96,6 @@ fun CameraScanScreen(
     var analyzing by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var showDemoSelector by remember { mutableStateOf(true) }
-    var showInconsistencyDialog by remember { mutableStateOf(false) }
     val imageCapture = remember { ImageCapture.Builder().build() }
 
     LaunchedEffect(flashEnabled) {
@@ -295,9 +294,8 @@ fun CameraScanScreen(
                                                         kotlinx.coroutines.delay(250)
                                                     }
 
-                                                    // 2. 각 이미지 해상도 조정 및 자르기 진행
-                                                    val conditions = mutableListOf<String>()
-                                                    val processedBitmaps = mutableListOf<Bitmap>()
+                                                    // 2. 각 이미지 전처리 및 다운스케일
+                                                    val scaledBitmaps = mutableListOf<Bitmap>()
                                                     for (file in files) {
                                                         val boundsOptions = BitmapFactory.Options().apply { inJustDecodeBounds = true }
                                                         BitmapFactory.decodeFile(file.absolutePath, boundsOptions)
@@ -316,61 +314,41 @@ fun CameraScanScreen(
                                                         if (rotatedBitmap != rawBitmap) {
                                                             rawBitmap.recycle()
                                                         }
-                                                        processedBitmaps.add(bitmap)
-                                                        
-                                                        // 3. 판독 라벨 산출
-                                                        val cond = getPrimaryCondition(bitmap, context)
-                                                        conditions.add(cond)
+                                                        // 공통 크기(224x224)로 다운스케일
+                                                        scaledBitmaps.add(Bitmap.createScaledBitmap(bitmap, 224, 224, true))
+                                                        if (bitmap != scaledBitmaps.last()) bitmap.recycle()
                                                     }
 
-                                                    // 4. 일관성 검사 및 다수결 판단
-                                                    val condCounts = conditions.groupingBy { it }.eachCount()
-                                                    val maxEntry = condCounts.maxByOrNull { it.value }
+                                                    // 3. 3장 픽셀 평균화 → 일관된 단일 이미지
+                                                    val avgBitmap = averageBitmaps(scaledBitmaps)
 
-                                                    if (maxEntry != null && maxEntry.value >= 2) {
-                                                        // 통과: 다수결에 해당하는 최종 1장 정보 추출
-                                                        val finalCondition = maxEntry.key
-                                                        val targetIndex = conditions.indexOf(finalCondition)
-                                                        val finalBitmap = processedBitmaps[targetIndex]
-                                                        val finalFile = files[targetIndex]
-
-                                                        // 사용하지 않는 이미지 자원 해제
-                                                        processedBitmaps.forEachIndexed { idx, bmp ->
-                                                            if (idx != targetIndex) bmp.recycle()
-                                                        }
-
-                                                        // 최종 1회 정밀 분석 수행
-                                                        if (useOnDeviceVision) {
-                                                            val result = com.example.nailnutri.analysis.NailClassifier.classify(
-                                                                bitmap = finalBitmap,
-                                                                imagePath = finalFile.absolutePath,
-                                                                context = context
-                                                            )
-                                                            repository.saveResult(result)
-                                                            onAnalysisComplete(result.id)
-                                                        } else if (useGemma) {
-                                                            val result = com.example.nailnutri.analysis.GemmaAnalyzer.analyzeNail(
-                                                                context = context,
-                                                                bitmap = finalBitmap,
-                                                                modelPath = gemmaModelPath,
-                                                                imagePath = finalFile.absolutePath
-                                                            )
-                                                            repository.saveResult(result)
-                                                            onAnalysisComplete(result.id)
-                                                        } else {
-                                                            val result = GeminiAnalyzer.analyzeNail(
-                                                                bitmap = finalBitmap,
-                                                                apiKey = apiKey,
-                                                                imagePath = finalFile.absolutePath
-                                                            )
-                                                            repository.saveResult(result)
-                                                            onAnalysisComplete(result.id)
-                                                        }
+                                                    // 4. 첫 번째 파일 경로로 최종 분석
+                                                    val finalFile = files[0]
+                                                    if (useOnDeviceVision) {
+                                                        val result = com.example.nailnutri.analysis.NailClassifier.classify(
+                                                            bitmap = avgBitmap,
+                                                            imagePath = finalFile.absolutePath,
+                                                            context = context
+                                                        )
+                                                        repository.saveResult(result)
+                                                        onAnalysisComplete(result.id)
+                                                    } else if (useGemma) {
+                                                        val result = com.example.nailnutri.analysis.GemmaAnalyzer.analyzeNail(
+                                                            context = context,
+                                                            bitmap = avgBitmap,
+                                                            modelPath = gemmaModelPath,
+                                                            imagePath = finalFile.absolutePath
+                                                        )
+                                                        repository.saveResult(result)
+                                                        onAnalysisComplete(result.id)
                                                     } else {
-                                                        // 모두 불합치: 자원 해제 및 팝업 안내
-                                                        processedBitmaps.forEach { it.recycle() }
-                                                        showInconsistencyDialog = true
-                                                        analyzing = false
+                                                        val result = GeminiAnalyzer.analyzeNail(
+                                                            bitmap = avgBitmap,
+                                                            apiKey = apiKey,
+                                                            imagePath = finalFile.absolutePath
+                                                        )
+                                                        repository.saveResult(result)
+                                                        onAnalysisComplete(result.id)
                                                     }
                                                 } catch (e: Exception) {
                                                     errorMessage = e.message ?: "촬영 및 분석 중 오류 발생"
@@ -394,19 +372,6 @@ fun CameraScanScreen(
 
                             Box(modifier = Modifier.width(100.dp))
                         }
-                    }
-
-                    if (showInconsistencyDialog) {
-                        AlertDialog(
-                            onDismissRequest = { showInconsistencyDialog = false },
-                            title = { Text("판독 일관성 부족") },
-                            text = { Text("3회 촬영된 이미지 간 판독 결과가 상이하여 분석을 완료하지 못했습니다. 손가락 가이드라인에 맞추어 다시 촬영해 주세요.") },
-                            confirmButton = {
-                                Button(onClick = { showInconsistencyDialog = false }) {
-                                    Text("확인")
-                                }
-                            }
-                        )
                     }
 
                     if (isMockMode && showDemoSelector) {
@@ -709,6 +674,36 @@ private fun triggerMockAnalysis(
     }
 }
 
+private fun averageBitmaps(bitmaps: List<Bitmap>): Bitmap {
+    if (bitmaps.size == 1) return bitmaps[0]
+    val w = bitmaps[0].width
+    val h = bitmaps[0].height
+    val n = bitmaps.size
+    val totalPixels = w * h
+    val sumR = IntArray(totalPixels)
+    val sumG = IntArray(totalPixels)
+    val sumB = IntArray(totalPixels)
+
+    for (bitmap in bitmaps) {
+        val pixels = IntArray(totalPixels)
+        bitmap.getPixels(pixels, 0, w, 0, 0, w, h)
+        for (i in 0 until totalPixels) {
+            sumR[i] += android.graphics.Color.red(pixels[i])
+            sumG[i] += android.graphics.Color.green(pixels[i])
+            sumB[i] += android.graphics.Color.blue(pixels[i])
+        }
+        if (bitmap !== bitmaps[0]) bitmap.recycle()
+    }
+
+    val outPixels = IntArray(totalPixels)
+    for (i in 0 until totalPixels) {
+        outPixels[i] = android.graphics.Color.rgb(sumR[i] / n, sumG[i] / n, sumB[i] / n)
+    }
+    val result = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
+    result.setPixels(outPixels, 0, w, 0, 0, w, h)
+    return result
+}
+
 private fun cropNailRegion(bitmap: Bitmap): Bitmap {
     val originalWidth = bitmap.width
     val originalHeight = bitmap.height
@@ -777,17 +772,4 @@ private suspend fun captureImageAsync(
             }
         }
     )
-}
-
-private fun getPrimaryCondition(bitmap: Bitmap, context: Context): String {
-    return try {
-        val result = com.example.nailnutri.analysis.NailClassifier.classify(
-            bitmap = bitmap,
-            imagePath = "",
-            context = context
-        )
-        result.symptoms.firstOrNull() ?: "NORMAL"
-    } catch (e: Exception) {
-        "NORMAL"
-    }
 }

@@ -1,6 +1,5 @@
-Acral_Lentiginous_Melanoma
-Healthy_Nail
-Onychogryphosis
-blue_finger
-clubbing
-pitting
+NORMAL
+ONYCHOMYCOSIS
+PALLOR
+DISCOLORATION
+UNKNOWN

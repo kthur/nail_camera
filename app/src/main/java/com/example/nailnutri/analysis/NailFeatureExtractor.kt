@@ -107,13 +107,39 @@ internal object NailFeatureExtractor {
             scaledBitmap.recycle()
         }
 
-        // 3. Extract skin-masked pixels in the center 40% window of the cropped image
+        // 3. Compute illumination statistics for adaptive thresholds
         val sampleStep = 2
         val xCoords = (0 until targetWidth step sampleStep).toList()
         val yCoords = (0 until targetHeight step sampleStep).toList()
         val xLen = xCoords.size
         val yLen = yCoords.size
 
+        val nailXMin = (targetWidth * 0.28).toInt()
+        val nailXMax = (targetWidth * 0.72).toInt()
+        val nailYMin = (targetHeight * 0.28).toInt()
+        val nailYMax = (targetHeight * 0.72).toInt()
+
+        val allV = mutableListOf<Double>()
+        for (j in 0 until yLen) {
+            val y = yCoords[j]
+            for (i in 0 until xLen) {
+                val x = xCoords[i]
+                if (x < nailXMin || x > nailXMax || y < nailYMin || y > nailYMax) continue
+                val idx = y * targetWidth + x
+                if (idx >= allPixels.size) continue
+                val (_, _, v) = rgbToHsv(Color.red(allPixels[idx]), Color.green(allPixels[idx]), Color.blue(allPixels[idx]))
+                allV.add(v)
+            }
+        }
+        val sortedAllV = allV.sorted()
+        val medianV = if (sortedAllV.isNotEmpty()) sortedAllV[sortedAllV.size / 2] else 0.5
+        val illumNorm = medianV.coerceIn(0.15, 0.85)
+
+        val skinVMin = (illumNorm * 0.3).coerceIn(0.08, 0.25)
+        val whiteVThreshold = (illumNorm * 1.5).coerceIn(0.60, 0.90)
+        val darkVThreshold = (illumNorm * 0.6).coerceIn(0.15, 0.40)
+
+        // 4. Extract skin-masked pixels in the center 40% window
         val gridV = Array(yLen) { DoubleArray(xLen) }
         val gridR = Array(yLen) { DoubleArray(xLen) }
         val gridValid = Array(yLen) { BooleanArray(xLen) }
@@ -125,11 +151,6 @@ internal object NailFeatureExtractor {
 
         val brightnessValues = mutableListOf<Double>()
         val redValues = mutableListOf<Double>()
-
-        val nailXMin = (targetWidth * 0.28).toInt()
-        val nailXMax = (targetWidth * 0.72).toInt()
-        val nailYMin = (targetHeight * 0.28).toInt()
-        val nailYMax = (targetHeight * 0.72).toInt()
 
         for (j in 0 until yLen) {
             val y = yCoords[j]
@@ -147,7 +168,7 @@ internal object NailFeatureExtractor {
                 val b = Color.blue(pixel)
 
                 val (h, s, v) = rgbToHsv(r, g, b)
-                val isSkin = (s in 0.13..0.75) && (v >= 0.15) && (h <= 50.0 || h >= 320.0)
+                val isSkin = (s in 0.13..0.75) && (v >= skinVMin) && (h <= 50.0 || h >= 320.0)
 
                 if (isSkin) {
                     gridV[j][i] = v
@@ -192,7 +213,7 @@ internal object NailFeatureExtractor {
                     val b = Color.blue(pixel)
 
                     val (h, s, v) = rgbToHsv(r, g, b)
-                    if (v >= 0.15) {
+                    if (v >= skinVMin) {
                         gridV[j][i] = v
                         gridR[j][i] = r.toDouble()
                         gridValid[j][i] = true
@@ -245,12 +266,12 @@ internal object NailFeatureExtractor {
 
                 val (_, s, v) = rgbToHsv(r, g, b)
 
-                if (s < 0.15 && v > 0.75 && v > avgV * 1.15) {
+                if (s < 0.15 && v > whiteVThreshold && v > avgV * 1.15) {
                     whiteSpotCount++
                 }
 
                 val isNearBboxEdge = (i - minI < 3 || maxI - i < 3 || j - minJ < 3 || maxJ - j < 3)
-                if (isNearBboxEdge && v < 0.30 && r < 80) {
+                if (isNearBboxEdge && v < darkVThreshold && r < 80) {
                     darkEdgeCount++
                 }
             }
@@ -302,7 +323,7 @@ internal object NailFeatureExtractor {
         val isDarkEdges = darkEdgeRatio > 0.08
         val rBRatio = avgR / (avgB + 1e-5)
         val isLowRedness = (avgR < 138.0 || rBRatio < 1.15) && !isDarkEdges
-        val isPale = avgS < 0.22 && avgV > 0.48 && avgR < 185.0
+        val isPale = avgS < 0.22 && avgV > illumNorm * 0.96 && avgR < 185.0
         val hasWhiteSpots = whiteSpotRatio > 0.015
         val isUnevenTexture = (avgLocalVGrad > 0.022 || avgLocalRGrad > 5.5) && !isDarkEdges
 
