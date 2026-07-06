@@ -1,5 +1,4 @@
-NORMAL
-ONYCHOMYCOSIS
-PALLOR
-DISCOLORATION
-UNKNOWN
+Healthy
+Melanonychia
+Nail_Lichen_Planus
+Onychomycosis

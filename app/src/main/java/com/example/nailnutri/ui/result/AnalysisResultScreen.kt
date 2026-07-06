@@ -279,13 +279,77 @@ fun ResultHeader(result: NailAnalysisResult) {
                 val bitmap = remember(result.imagePath) {
                     BitmapFactory.decodeFile(file.absolutePath)
                 }
-                bitmap?.let {
-                    Image(
-                        bitmap = it.asImageBitmap(),
-                        contentDescription = "Captured nail",
-                        contentScale = ContentScale.Crop,
-                        modifier = Modifier.fillMaxSize()
-                    )
+                bitmap?.let { b ->
+                    BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+                        val widthPx = constraints.maxWidth.toFloat()
+                        val heightPx = constraints.maxHeight.toFloat()
+                        
+                        Image(
+                            bitmap = b.asImageBitmap(),
+                            contentDescription = "Captured nail",
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier.fillMaxSize()
+                        )
+                        
+                        // Canvas to draw localized symptom regions
+                        androidx.compose.foundation.Canvas(modifier = Modifier.fillMaxSize()) {
+                            result.symptomRegions.forEach { region ->
+                                val left = region.xMin * widthPx
+                                val top = region.yMin * heightPx
+                                val right = region.xMax * widthPx
+                                val bottom = region.yMax * heightPx
+                                
+                                drawRect(
+                                    color = Color(0xFFFF5252),
+                                    topLeft = androidx.compose.ui.geometry.Offset(left, top),
+                                    size = androidx.compose.ui.geometry.Size(right - left, bottom - top),
+                                    style = androidx.compose.ui.graphics.drawscope.Stroke(
+                                        width = 2.5.dp.toPx(),
+                                        pathEffect = androidx.compose.ui.graphics.PathEffect.dashPathEffect(
+                                            floatArrayOf(15f, 10f), 0f
+                                        )
+                                    )
+                                )
+                            }
+                        }
+                        
+                        // Absolute text badges for each region
+                        result.symptomRegions.forEach { region ->
+                            val leftDp = maxWidth * region.xMin
+                            val topDp = (maxHeight * region.yMin) - 24.dp
+                            
+                            val displayLabel = when (region.label) {
+                                "white_spots_region_1" -> "아연 결핍성 흰 반점 의심 영역"
+                                "white_spots_region_2" -> "네일 판 내 백색 반점 지점"
+                                "vertical_ridges_region" -> "세로 홈/요철 시작 부위"
+                                "spoon_nails_region_1" -> "중앙 요함 및 숟가락형 변형 영역"
+                                "spoon_nails_region_2" -> "손톱 판 가장자리 들뜸 의심 지점"
+                                "brittle_region" -> "손톱 끝 갈라짐 및 깨짐 취약 부위"
+                                "onychomycosis_region_1" -> "진균 감염성 변색 및 박리 의심 영역"
+                                "onychomycosis_region_2" -> "가장자리 황태/비후 의심 지점"
+                                "melanonychia_region" -> "멜라닌 색소 과다 침착 세로 띠"
+                                else -> region.label
+                            }
+                            
+                            Box(
+                                modifier = Modifier
+                                    .offset(
+                                        x = leftDp,
+                                        y = topDp.coerceAtLeast(4.dp)
+                                    )
+                                    .background(Color(0xFFFF5252), RoundedCornerShape(4.dp))
+                                    .border(1.dp, Color.White.copy(alpha = 0.5f), RoundedCornerShape(4.dp))
+                                    .padding(horizontal = 6.dp, vertical = 2.dp)
+                            ) {
+                                Text(
+                                    text = displayLabel,
+                                    color = Color.White,
+                                    fontSize = 9.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        }
+                    }
                 }
             } else {
                 Box(

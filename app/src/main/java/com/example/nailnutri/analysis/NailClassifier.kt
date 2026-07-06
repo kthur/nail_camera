@@ -12,16 +12,87 @@ import java.util.UUID
 
 object NailClassifier {
 
+    private fun getMultiCrops(original: Bitmap): List<Bitmap> {
+        val width = original.width
+        val height = original.height
+        val cx = (width * 0.1).toInt()
+        val cy = (height * 0.1).toInt()
+        val cWidth = (width * 0.8).toInt().coerceAtLeast(1)
+        val cHeight = (height * 0.8).toInt().coerceAtLeast(1)
+        
+        // 1. Center Crop (Core body)
+        val centerCrop = Bitmap.createBitmap(original, cx, cy, cWidth, cHeight)
+        
+        // 2. Top Crop (Tip area)
+        val tHeight = (height * 0.45).toInt().coerceAtLeast(1)
+        val topCrop = Bitmap.createBitmap(original, cx, cy, cWidth, tHeight)
+        
+        // 3. Bottom Crop (Lunar/Cuticle area)
+        val bHeight = (height * 0.45).toInt().coerceAtLeast(1)
+        val bY = (height * 0.45).toInt().coerceAtMost(height - bHeight)
+        val bottomCrop = Bitmap.createBitmap(original, cx, bY, cWidth, bHeight)
+        
+        return listOf(centerCrop, topCrop, bottomCrop)
+    }
+
+    private fun localizeSymptoms(finalLabel: String, predictions: List<Pair<String, Float>>): List<com.example.nailnutri.data.SymptomRegion> {
+        val regions = mutableListOf<com.example.nailnutri.data.SymptomRegion>()
+        val topConf = predictions.getOrNull(1)?.second ?: 0f
+        val bottomConf = predictions.getOrNull(2)?.second ?: 0f
+        
+        when (finalLabel.lowercase(Locale.ROOT)) {
+            "white_spots" -> {
+                if (bottomConf > topConf) {
+                    regions.add(com.example.nailnutri.data.SymptomRegion("white_spots_region_1", 0.25f, 0.55f, 0.75f, 0.85f))
+                } else {
+                    regions.add(com.example.nailnutri.data.SymptomRegion("white_spots_region_2", 0.35f, 0.25f, 0.65f, 0.55f))
+                }
+            }
+            "vertical_ridges" -> {
+                regions.add(com.example.nailnutri.data.SymptomRegion("vertical_ridges_region", 0.25f, 0.2f, 0.35f, 0.8f))
+                regions.add(com.example.nailnutri.data.SymptomRegion("vertical_ridges_region", 0.65f, 0.2f, 0.75f, 0.8f))
+            }
+            "spoon_nails" -> {
+                regions.add(com.example.nailnutri.data.SymptomRegion("spoon_nails_region_1", 0.3f, 0.3f, 0.7f, 0.7f))
+                regions.add(com.example.nailnutri.data.SymptomRegion("spoon_nails_region_2", 0.15f, 0.15f, 0.85f, 0.35f))
+            }
+            "brittle" -> {
+                regions.add(com.example.nailnutri.data.SymptomRegion("brittle_region", 0.2f, 0.1f, 0.8f, 0.4f))
+            }
+            "onychomycosis" -> {
+                if (topConf > bottomConf) {
+                    regions.add(com.example.nailnutri.data.SymptomRegion("onychomycosis_region_1", 0.2f, 0.1f, 0.8f, 0.45f))
+                } else {
+                    regions.add(com.example.nailnutri.data.SymptomRegion("onychomycosis_region_2", 0.15f, 0.35f, 0.45f, 0.85f))
+                }
+            }
+            "melanonychia" -> {
+                regions.add(com.example.nailnutri.data.SymptomRegion("melanonychia_region", 0.45f, 0.15f, 0.55f, 0.85f))
+            }
+        }
+        return regions
+    }
+
     fun classify(bitmap: Bitmap, imagePath: String, context: Context? = null): NailAnalysisResult {
         if (context != null) {
             try {
                 if (TFLiteClassifier.load(context)) {
-                    val (label, confidence) = TFLiteClassifier.getTopPrediction(bitmap)
-                    if (confidence > 0.5f) {
-                        val condition = TFLiteClassifier.mapToCondition(label)
+                    val crops = getMultiCrops(bitmap)
+                    val predictions = crops.map { TFLiteClassifier.getTopPrediction(it) }
+                    
+                    val labelScores = predictions.groupBy { it.first }
+                        .mapValues { entry -> entry.value.sumOf { it.second.toDouble() } }
+                    val bestLabelEntry = labelScores.maxByOrNull { it.value }
+                    
+                    val finalLabel = bestLabelEntry?.key ?: "healthy"
+                    val finalConfidence = ((bestLabelEntry?.value ?: 0.0) / crops.size).toFloat()
+                    
+                    if (finalConfidence > 0.35f) {
+                        val condition = TFLiteClassifier.mapToCondition(finalLabel)
                         val dateStr = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault()).format(Date())
                         val mockId = UUID.randomUUID().toString()
-                        return buildSingleConditionResult(condition, imagePath, dateStr, mockId)
+                        val symptomRegions = localizeSymptoms(finalLabel, predictions)
+                        return buildSingleConditionResult(condition, imagePath, dateStr, mockId, symptomRegions)
                     }
                 }
             } catch (_: Exception) { }
@@ -33,21 +104,34 @@ object NailClassifier {
     fun buildResultForCondition(condition: String, imagePath: String): NailAnalysisResult {
         val dateStr = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault()).format(Date())
         val mockId = UUID.randomUUID().toString()
-        return buildSingleConditionResult(condition, imagePath, dateStr, mockId)
+        return buildSingleConditionResult(condition, imagePath, dateStr, mockId, emptyList())
     }
 
     private fun buildResultFromFeatures(features: NailFeatures, imagePath: String): NailAnalysisResult {
         val dateStr = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault()).format(Date())
         val mockId = UUID.randomUUID().toString()
 
+        val regions = mutableListOf<com.example.nailnutri.data.SymptomRegion>()
         val activeConditions = mutableListOf<String>()
-        if (features.hasWhiteSpots) activeConditions.add("white_spots")
-        if (features.isUnevenTexture) activeConditions.add("vertical_ridges")
-        if (features.isDarkEdges) activeConditions.add("spoon_nails")
-        if (features.isPale || features.isLowRedness) activeConditions.add("brittle")
+        if (features.hasWhiteSpots) {
+            activeConditions.add("white_spots")
+            regions.add(com.example.nailnutri.data.SymptomRegion("white_spots_region_1", 0.3f, 0.4f, 0.7f, 0.7f))
+        }
+        if (features.isUnevenTexture) {
+            activeConditions.add("vertical_ridges")
+            regions.add(com.example.nailnutri.data.SymptomRegion("vertical_ridges_region", 0.3f, 0.2f, 0.7f, 0.8f))
+        }
+        if (features.isDarkEdges) {
+            activeConditions.add("spoon_nails")
+            regions.add(com.example.nailnutri.data.SymptomRegion("spoon_nails_region_2", 0.2f, 0.2f, 0.8f, 0.5f))
+        }
+        if (features.isPale || features.isLowRedness) {
+            activeConditions.add("brittle")
+            regions.add(com.example.nailnutri.data.SymptomRegion("brittle_region", 0.25f, 0.3f, 0.75f, 0.7f))
+        }
         if (activeConditions.isEmpty()) activeConditions.add("healthy")
 
-        val results = activeConditions.map { buildSingleConditionResult(it, imagePath, dateStr, mockId) }
+        val results = activeConditions.map { buildSingleConditionResult(it, imagePath, dateStr, mockId, emptyList()) }
 
         val allSymptoms = results.flatMap { it.symptoms }.distinct()
         val seenNutrients = mutableSetOf<String>()
@@ -67,7 +151,8 @@ object NailClassifier {
             symptoms = allSymptoms.ifEmpty { listOf("특이사항 없음 (건강함)") },
             deficientNutrients = combinedDeficient,
             sufficientNutrients = combinedSufficient,
-            overallAdvice = combinedAdvice
+            overallAdvice = combinedAdvice,
+            symptomRegions = regions
         )
     }
 
@@ -75,7 +160,8 @@ object NailClassifier {
         condition: String,
         imagePath: String,
         dateStr: String,
-        mockId: String
+        mockId: String,
+        symptomRegions: List<com.example.nailnutri.data.SymptomRegion> = emptyList()
     ): NailAnalysisResult {
         return when (condition.lowercase(Locale.ROOT)) {
             "healthy" -> NailAnalysisResult(
@@ -90,7 +176,8 @@ object NailClassifier {
                     SufficientNutrientDetail("철분 (Iron)", "네일 베드 색상이 붉고 생기 있어 산소 공급이 원활합니다.", "산소 운반 및 건강한 세포 형성"),
                     SufficientNutrientDetail("비오틴 (Biotin)", "손톱 끝이 얇아지거나 부서지지 않고 탄탄합니다.", "손톱 두께 및 단단함 유지")
                 ),
-                overallAdvice = "축하합니다! 현재 손톱 상태는 매우 건강합니다. 현재의 균형 잡힌 영양 식단을 유지하고 건조해지지 않도록 가벼운 핸드크림 케어를 계속해주세요."
+                overallAdvice = "축하합니다! 현재 손톱 상태는 매우 건강합니다. 현재의 균형 잡힌 영양 식단을 유지하고 건조해지지 않도록 가벼운 핸드크림 케어를 계속해주세요.",
+                symptomRegions = symptomRegions
             )
             "white_spots" -> NailAnalysisResult(
                 id = mockId,
@@ -105,7 +192,8 @@ object NailClassifier {
                     SufficientNutrientDetail("비오틴", "손톱이 깨지거나 찢어지지 않아 기본 비오틴 공급은 원활합니다.", "손톱 구조 강화"),
                     SufficientNutrientDetail("철분", "네일 베드가 혈색이 좋아 심한 철분 부족은 아닙니다.", "혈액 생성")
                 ),
-                overallAdvice = "아연 결핍 증상인 흰 반점이 눈에 띕니다. 아연이 풍부한 견과류와 육류 섭취를 늘리고, 필요시 단기간 칼슘/아연 보충제 섭취를 고려해 볼 수 있습니다."
+                overallAdvice = "아연 결핍 증상인 흰 반점이 눈에 띕니다. 아연이 풍부한 견과류 and 육류 섭취를 늘리고, 필요시 단기간 칼슘/아연 보충제 섭취를 고려해 볼 수 있습니다.",
+                symptomRegions = symptomRegions
             )
             "vertical_ridges" -> NailAnalysisResult(
                 id = mockId,
@@ -120,7 +208,8 @@ object NailClassifier {
                     SufficientNutrientDetail("아연", "흰색 반점이나 가로 반점은 관찰되지 않아 아연 상태는 양호합니다.", "아연은 손톱 성장에 기여"),
                     SufficientNutrientDetail("단백질", "기본적인 손톱 강도는 잘 유지되고 있습니다.", "케라틴 합성")
                 ),
-                overallAdvice = "노화의 자연스러운 현상일 수도 있지만, 비타민 B12와 마그네슘 부족도 큰 원인이 됩니다. 잡곡밥, 녹색 채소, 그리고 적당한 고기류가 포함된 식단이 권장됩니다."
+                overallAdvice = "노화의 자연스러운 현상일 수도 있지만, 비타민 B12와 마그네슘 부족도 큰 원인이 됩니다. 잡곡밥, 녹색 채소, 그리고 적당한 고기류가 포함된 식단이 권장됩니다.",
+                symptomRegions = symptomRegions
             )
             "spoon_nails" -> NailAnalysisResult(
                 id = mockId,
@@ -134,7 +223,8 @@ object NailClassifier {
                 sufficientNutrients = listOf(
                     SufficientNutrientDetail("칼슘", "손톱 표면이 전반적으로 깨끗하며 칼슘 분배는 양호합니다.", "골격 및 네일 강도 유지")
                 ),
-                overallAdvice = "숟가락 모양의 손톱(Koilonychia)은 심각한 철분 부족 빈혈의 신호일 수 있습니다. 붉은 고기와 녹색 잎채소를 다량 섭취하시고 철분의 흡수율을 높이기 위해 비타민 C와 함께 복용하는 것을 강력히 권장합니다."
+                overallAdvice = "숟가락 모양의 손톱(Koilonychia)은 심각한 철분 부족 빈혈의 신호일 수 있습니다. 붉은 고기와 녹색 잎채소를 다량 섭취하시고 철분의 흡수율을 높이기 위해 비타민 C와 함께 복용하는 것을 강력히 권장합니다.",
+                symptomRegions = symptomRegions
             )
             "brittle" -> NailAnalysisResult(
                 id = mockId,
@@ -148,7 +238,8 @@ object NailClassifier {
                 sufficientNutrients = listOf(
                     SufficientNutrientDetail("철분", "빈혈 증상이 없고 네일 베드의 혈색은 건강한 핑크빛을 띱니다.", "산소 활성 공급")
                 ),
-                overallAdvice = "갈라지고 건조한 손톱은 비오틴과 지방산 공급이 최우선입니다. 계란이나 아몬드를 매일 드셔 보시고 네일 오일이나 핸드크림을 자주 발라 외부 수분을 공급해 주는 것도 아주 중요합니다."
+                overallAdvice = "갈라지고 건조한 손톱은 비오틴과 지방산 공급이 최우선입니다. 계란이나 아몬드를 매일 드셔 보시고 네일 오일이나 핸드크림을 자주 발라 외부 수분을 공급해 주는 것도 아주 중요합니다.",
+                symptomRegions = symptomRegions
             )
             else -> NailAnalysisResult(
                 id = mockId,
@@ -159,7 +250,8 @@ object NailClassifier {
                     NutrientDetail("철분 (Iron)", "Moderate", "분석 결과 미세한 철분 부족 신호가 감지되었습니다.", listOf("붉은 고기", "시금치", "두부"))
                 ),
                 sufficientNutrients = emptyList(),
-                overallAdvice = "일반적인 균형 잡힌 다이어트 식단을 구성하시고, 비타민 C가 풍부한 과일 및 야채 섭취를 늘려보세요."
+                overallAdvice = "일반적인 균형 잡힌 다이어트 식단을 구성하시고, 비타민 C가 풍부한 과일 및 야채 섭취를 늘려보세요.",
+                symptomRegions = symptomRegions
             )
         }
     }

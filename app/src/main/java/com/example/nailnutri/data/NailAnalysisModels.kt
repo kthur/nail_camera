@@ -18,6 +18,15 @@ data class SufficientNutrientDetail(
 )
 
 @Serializable
+data class SymptomRegion(
+    val label: String,
+    val xMin: Float,
+    val yMin: Float,
+    val xMax: Float,
+    val yMax: Float
+)
+
+@Serializable
 data class NailAnalysisResult(
     val id: String,
     val date: String,
@@ -25,5 +34,6 @@ data class NailAnalysisResult(
     val symptoms: List<String>,
     val deficientNutrients: List<NutrientDetail>,
     val sufficientNutrients: List<SufficientNutrientDetail>,
-    val overallAdvice: String
+    val overallAdvice: String,
+    val symptomRegions: List<SymptomRegion> = emptyList()
 )
