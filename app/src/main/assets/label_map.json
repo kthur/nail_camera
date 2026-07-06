@@ -7,5 +7,10 @@
   "pale": "PALLOR",
   "discoloration": "DISCOLORATION",
   "pigmentation": "DISCOLORATION",
+  "isic": "DISCOLORATION",
+  "huggingface": "ONYCHOMYCOSIS",
+  "dermnet_kagglealternative": "NORMAL",
+  "roboflow": "ONYCHOMYCOSIS",
+  "roboflow_mirror": "ONYCHOMYCOSIS",
   "unknown": "UNKNOWN"
 }

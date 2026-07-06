@@ -88,7 +88,7 @@ def merge_csvs(csv_paths, merged_path):
 def main():
     parser = argparse.ArgumentParser(description="Preprocess nail disease datasets")
     parser.add_argument("--datasets", type=str, default="../datasets", help="Root folder containing downloaded datasets")
-    parser.add_argument("--label_map", type=str, default="../app/src/main/assets/label_map.json", help="Path to label mapping JSON")
+    parser.add_argument("--label_map", type=str, default="app/src/main/assets/label_map.json", help="Path to label mapping JSON")
     args = parser.parse_args()
 
     root = Path(__file__).parent.parent / args.datasets
@@ -100,11 +100,44 @@ def main():
     merged_csv = root / "all_nail_data.csv"
     csv_paths = []
     for source in root.iterdir():
-        if source.is_dir():
+        if source.is_dir() and source.name != "all_processed_data":
             csv_path = process_source(source, label_map, root)
             csv_paths.append(csv_path)
     merge_csvs(csv_paths, merged_csv)
     print(f"Merged CSV written to {merged_csv}")
+
+    # Compile a single unified train/validation split folder tree
+    import shutil
+    split_dir = root / "all_processed_data"
+    train_dir = split_dir / "train"
+    val_dir = split_dir / "validation"
+    
+    if split_dir.exists():
+        shutil.rmtree(split_dir)
+        
+    train_dir.mkdir(parents=True, exist_ok=True)
+    val_dir.mkdir(parents=True, exist_ok=True)
+    
+    print("[*] Splitting preprocessed dataset into train/validation directories...", flush=True)
+    copied_count = 0
+    for source in root.iterdir():
+        if source.is_dir() and source.name != "all_processed_data":
+            proc_img_dir = source / "processed"
+            csv_path = proc_img_dir / "labels.csv"
+            if csv_path.exists():
+                with open(csv_path, "r") as f:
+                    reader = csv.reader(f)
+                    next(reader)
+                    for row in reader:
+                        filename, label = row
+                        src_file = proc_img_dir / filename
+                        if src_file.exists() and label != "UNKNOWN":
+                            target_sub = train_dir if random.random() < 0.85 else val_dir
+                            target_label_dir = target_sub / label
+                            target_label_dir.mkdir(parents=True, exist_ok=True)
+                            shutil.copy2(src_file, target_label_dir / filename)
+                            copied_count += 1
+    print(f"[+] Compiled all_processed_data structure: Copied {copied_count} files.", flush=True)
 
 if __name__ == "__main__":
     main()
