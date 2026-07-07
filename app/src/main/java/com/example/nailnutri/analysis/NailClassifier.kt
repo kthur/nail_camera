@@ -2,6 +2,7 @@ package com.example.nailnutri.analysis
 
 import android.content.Context
 import android.graphics.Bitmap
+import android.graphics.Color
 import com.example.nailnutri.data.NailAnalysisResult
 import com.example.nailnutri.data.NutrientDetail
 import com.example.nailnutri.data.SufficientNutrientDetail
@@ -35,41 +36,214 @@ object NailClassifier {
         return listOf(centerCrop, topCrop, bottomCrop)
     }
 
-    private fun localizeSymptoms(finalLabel: String, predictions: List<Pair<String, Float>>): List<com.example.nailnutri.data.SymptomRegion> {
+    private fun localizeSymptoms(finalLabel: String, bitmap: Bitmap): List<com.example.nailnutri.data.SymptomRegion> {
         val regions = mutableListOf<com.example.nailnutri.data.SymptomRegion>()
-        val topConf = predictions.getOrNull(1)?.second ?: 0f
-        val bottomConf = predictions.getOrNull(2)?.second ?: 0f
+        val width = bitmap.width
+        val height = bitmap.height
+        if (width <= 0 || height <= 0) return regions
+
+        // 1. Center crop matching Android camera crop (60% width, 1.33 aspect ratio)
+        val cropW = (width * 0.6).toInt().coerceAtLeast(1)
+        val cropH = (cropW * 1.33).toInt().coerceAtLeast(1)
+        val cropX = (width - cropW) / 2
+        val cropY = (height - cropH) / 2
+        val safeX = cropX.coerceIn(0, (width - cropW).coerceAtLeast(0))
+        val safeY = cropY.coerceIn(0, (height - cropH).coerceAtLeast(0))
+
+        val cropW_safe = minOf(cropW, width - safeX)
+        val cropH_safe = minOf(cropH, height - safeY)
+
+        // 2. Downsample to 150x200 to speed up scanning
+        val croppedTemp = Bitmap.createBitmap(bitmap, safeX, safeY, cropW_safe, cropH_safe)
+        val scaled = Bitmap.createScaledBitmap(croppedTemp, 150, 200, true)
+        if (croppedTemp != bitmap && croppedTemp != scaled) {
+            croppedTemp.recycle()
+        }
+
+        // Calculate illumination parameters
+        var vSum = 0.0
+        var pixelCount = 0
+        val allV = DoubleArray(150 * 200)
         
-        when (finalLabel.lowercase(Locale.ROOT)) {
-            "white_spots" -> {
-                if (bottomConf > topConf) {
-                    regions.add(com.example.nailnutri.data.SymptomRegion("white_spots_region_1", 0.25f, 0.55f, 0.75f, 0.85f))
-                } else {
-                    regions.add(com.example.nailnutri.data.SymptomRegion("white_spots_region_2", 0.35f, 0.25f, 0.65f, 0.55f))
-                }
-            }
-            "vertical_ridges" -> {
-                regions.add(com.example.nailnutri.data.SymptomRegion("vertical_ridges_region", 0.25f, 0.2f, 0.35f, 0.8f))
-                regions.add(com.example.nailnutri.data.SymptomRegion("vertical_ridges_region", 0.65f, 0.2f, 0.75f, 0.8f))
-            }
-            "spoon_nails" -> {
-                regions.add(com.example.nailnutri.data.SymptomRegion("spoon_nails_region_1", 0.3f, 0.3f, 0.7f, 0.7f))
-                regions.add(com.example.nailnutri.data.SymptomRegion("spoon_nails_region_2", 0.15f, 0.15f, 0.85f, 0.35f))
-            }
-            "brittle" -> {
-                regions.add(com.example.nailnutri.data.SymptomRegion("brittle_region", 0.2f, 0.1f, 0.8f, 0.4f))
-            }
-            "onychomycosis" -> {
-                if (topConf > bottomConf) {
-                    regions.add(com.example.nailnutri.data.SymptomRegion("onychomycosis_region_1", 0.2f, 0.1f, 0.8f, 0.45f))
-                } else {
-                    regions.add(com.example.nailnutri.data.SymptomRegion("onychomycosis_region_2", 0.15f, 0.35f, 0.45f, 0.85f))
-                }
-            }
-            "melanonychia" -> {
-                regions.add(com.example.nailnutri.data.SymptomRegion("melanonychia_region", 0.45f, 0.15f, 0.55f, 0.85f))
+        for (y in 0 until 200) {
+            for (x in 0 until 150) {
+                val pixel = scaled.getPixel(x, y)
+                val r = Color.red(pixel)
+                val g = Color.green(pixel)
+                val b = Color.blue(pixel)
+                val maxVal = maxOf(r, maxOf(g, b)) / 255.0
+                allV[y * 150 + x] = maxVal
+                vSum += maxVal
+                pixelCount++
             }
         }
+        val avgV = if (pixelCount > 0) vSum / pixelCount else 0.5
+        val whiteVThreshold = (avgV * 1.35).coerceIn(0.60, 0.92)
+
+        when (finalLabel.lowercase(Locale.ROOT)) {
+            "white_spots" -> {
+                var minX = 150; var maxX = 0; var minY = 200; var maxY = 0
+                var foundCount = 0
+                for (y in 40 until 160) {
+                    for (x in 30 until 120) {
+                        val pixel = scaled.getPixel(x, y)
+                        val r = Color.red(pixel)
+                        val g = Color.green(pixel)
+                        val b = Color.blue(pixel)
+                        
+                        val maxColor = maxOf(r, maxOf(g, b))
+                        val minColor = minOf(r, minOf(g, b))
+                        val delta = (maxColor - minColor).toFloat()
+                        val s = if (maxColor > 0) delta / maxColor else 0f
+                        val v = maxColor / 255.0
+                        
+                        if (s < 0.15f && v > whiteVThreshold && v > avgV * 1.15) {
+                            if (x < minX) minX = x
+                            if (x > maxX) maxX = x
+                            if (y < minY) minY = y
+                            if (y > maxY) maxY = y
+                            foundCount++
+                        }
+                    }
+                }
+                
+                if (foundCount >= 3) {
+                    val relXMin = (safeX + (minX / 150f) * cropW_safe) / width
+                    val relXMax = (safeX + (maxX / 150f) * cropW_safe) / width
+                    val relYMin = (safeY + (minY / 200f) * cropH_safe) / height
+                    val relYMax = (safeY + (maxY / 200f) * cropH_safe) / height
+                    
+                    regions.add(com.example.nailnutri.data.SymptomRegion(
+                        "white_spots_region_1",
+                        (relXMin - 0.03f).coerceAtLeast(0.1f),
+                        (relYMin - 0.03f).coerceAtLeast(0.1f),
+                        (relXMax + 0.03f).coerceAtMost(0.9f),
+                        (relYMax + 0.03f).coerceAtMost(0.9f)
+                    ))
+                } else {
+                    regions.add(com.example.nailnutri.data.SymptomRegion("white_spots_region_2", 0.35f, 0.35f, 0.65f, 0.65f))
+                }
+            }
+            
+            "vertical_ridges" -> {
+                val colGradients = DoubleArray(150)
+                for (x in 20 until 129) {
+                    var gradSum = 0.0
+                    for (y in 30 until 170) {
+                        val vSelf = allV[y * 150 + x]
+                        val vRight = allV[y * 150 + (x + 1)]
+                        gradSum += Math.abs(vSelf - vRight)
+                    }
+                    colGradients[x] = gradSum
+                }
+                
+                val bestCol = (20 until 129).maxByOrNull { colGradients[it] } ?: 75
+                val minX = (bestCol - 15).coerceAtLeast(15)
+                val maxX = (bestCol + 15).coerceAtMost(135)
+                
+                val relXMin = (safeX + (minX / 150f) * cropW_safe) / width
+                val relXMax = (safeX + (maxX / 150f) * cropW_safe) / width
+                
+                regions.add(com.example.nailnutri.data.SymptomRegion(
+                    "vertical_ridges_region",
+                    relXMin,
+                    0.25f,
+                    relXMax,
+                    0.75f
+                ))
+            }
+            
+            "spoon_nails" -> {
+                regions.add(com.example.nailnutri.data.SymptomRegion("spoon_nails_region_1", 0.25f, 0.3f, 0.75f, 0.7f))
+            }
+            
+            "brittle" -> {
+                regions.add(com.example.nailnutri.data.SymptomRegion("brittle_region", 0.2f, 0.15f, 0.8f, 0.45f))
+            }
+            
+            "onychomycosis" -> {
+                var minX = 150; var maxX = 0; var minY = 200; var maxY = 0
+                var foundCount = 0
+                for (y in 25 until 175) {
+                    for (x in 20 until 130) {
+                        val pixel = scaled.getPixel(x, y)
+                        val r = Color.red(pixel)
+                        val g = Color.green(pixel)
+                        val b = Color.blue(pixel)
+                        
+                        val maxColor = maxOf(r, maxOf(g, b))
+                        val minColor = minOf(r, minOf(g, b))
+                        val delta = (maxColor - minColor).toFloat()
+                        
+                        var h = 0f
+                        if (delta > 0) {
+                            h = if (maxColor == r) {
+                                (g - b) / delta
+                            } else if (maxColor == g) {
+                                2f + (b - r) / delta
+                            } else {
+                                4f + (r - g) / delta
+                            }
+                            h *= 60f
+                            if (h < 0) h += 360f
+                        }
+                        
+                        if (delta > 15 && h in 18.0f..68.0f && maxColor > 60) {
+                            if (x < minX) minX = x
+                            if (x > maxX) maxX = x
+                            if (y < minY) minY = y
+                            if (y > maxY) maxY = y
+                            foundCount++
+                        }
+                    }
+                }
+                
+                if (foundCount >= 5) {
+                    val relXMin = (safeX + (minX / 150f) * cropW_safe) / width
+                    val relXMax = (safeX + (maxX / 150f) * cropW_safe) / width
+                    val relYMin = (safeY + (minY / 200f) * cropH_safe) / height
+                    val relYMax = (safeY + (maxY / 200f) * cropH_safe) / height
+                    
+                    regions.add(com.example.nailnutri.data.SymptomRegion(
+                        "onychomycosis_region_1",
+                        (relXMin - 0.02f).coerceAtLeast(0.1f),
+                        (relYMin - 0.02f).coerceAtLeast(0.1f),
+                        (relXMax + 0.02f).coerceAtMost(0.9f),
+                        (relYMax + 0.02f).coerceAtMost(0.9f)
+                    ))
+                } else {
+                    regions.add(com.example.nailnutri.data.SymptomRegion("onychomycosis_region_2", 0.2f, 0.15f, 0.8f, 0.45f))
+                }
+            }
+            
+            "melanonychia" -> {
+                val colSums = DoubleArray(150)
+                for (x in 20 until 130) {
+                    var sum = 0.0
+                    for (y in 25 until 175) {
+                        sum += allV[y * 150 + x]
+                    }
+                    colSums[x] = sum
+                }
+                
+                val minCol = (20 until 130).minByOrNull { colSums[it] } ?: 75
+                val minX = (minCol - 8).coerceAtLeast(15)
+                val maxX = (minCol + 8).coerceAtMost(135)
+                
+                val relXMin = (safeX + (minX / 150f) * cropW_safe) / width
+                val relXMax = (safeX + (maxX / 150f) * cropW_safe) / width
+                
+                regions.add(com.example.nailnutri.data.SymptomRegion(
+                    "melanonychia_region",
+                    relXMin,
+                    0.15f,
+                    relXMax,
+                    0.85f
+                ))
+            }
+        }
+        
+        scaled.recycle()
         return regions
     }
 
@@ -91,14 +265,14 @@ object NailClassifier {
                         val condition = TFLiteClassifier.mapToCondition(finalLabel)
                         val dateStr = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault()).format(Date())
                         val mockId = UUID.randomUUID().toString()
-                        val symptomRegions = localizeSymptoms(finalLabel, predictions)
+                        val symptomRegions = localizeSymptoms(finalLabel, bitmap)
                         return buildSingleConditionResult(condition, imagePath, dateStr, mockId, symptomRegions)
                     }
                 }
             } catch (_: Exception) { }
         }
         val features = NailFeatureExtractor.extract(bitmap)
-        return buildResultFromFeatures(features, imagePath)
+        return buildResultFromFeatures(features, imagePath, bitmap)
     }
 
     fun buildResultForCondition(condition: String, imagePath: String): NailAnalysisResult {
@@ -107,7 +281,7 @@ object NailClassifier {
         return buildSingleConditionResult(condition, imagePath, dateStr, mockId, emptyList())
     }
 
-    private fun buildResultFromFeatures(features: NailFeatures, imagePath: String): NailAnalysisResult {
+    private fun buildResultFromFeatures(features: NailFeatures, imagePath: String, bitmap: Bitmap): NailAnalysisResult {
         val dateStr = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault()).format(Date())
         val mockId = UUID.randomUUID().toString()
 
@@ -115,19 +289,19 @@ object NailClassifier {
         val activeConditions = mutableListOf<String>()
         if (features.hasWhiteSpots) {
             activeConditions.add("white_spots")
-            regions.add(com.example.nailnutri.data.SymptomRegion("white_spots_region_1", 0.3f, 0.4f, 0.7f, 0.7f))
+            regions.addAll(localizeSymptoms("white_spots", bitmap))
         }
         if (features.isUnevenTexture) {
             activeConditions.add("vertical_ridges")
-            regions.add(com.example.nailnutri.data.SymptomRegion("vertical_ridges_region", 0.3f, 0.2f, 0.7f, 0.8f))
+            regions.addAll(localizeSymptoms("vertical_ridges", bitmap))
         }
         if (features.isDarkEdges) {
             activeConditions.add("spoon_nails")
-            regions.add(com.example.nailnutri.data.SymptomRegion("spoon_nails_region_2", 0.2f, 0.2f, 0.8f, 0.5f))
+            regions.addAll(localizeSymptoms("spoon_nails", bitmap))
         }
         if (features.isPale || features.isLowRedness) {
             activeConditions.add("brittle")
-            regions.add(com.example.nailnutri.data.SymptomRegion("brittle_region", 0.25f, 0.3f, 0.75f, 0.7f))
+            regions.addAll(localizeSymptoms("brittle", bitmap))
         }
         if (activeConditions.isEmpty()) activeConditions.add("healthy")
 
