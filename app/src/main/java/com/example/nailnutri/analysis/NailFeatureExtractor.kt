@@ -322,8 +322,9 @@ internal object NailFeatureExtractor {
         // Tuned threshold heuristics
         val isDarkEdges = darkEdgeRatio > 0.08
         val rBRatio = avgR / (avgB + 1e-5)
-        val isLowRedness = (avgR < 138.0 || rBRatio < 1.15) && !isDarkEdges
-        val isPale = avgS < 0.22 && avgV > illumNorm * 0.96 && avgR < 185.0
+        // Prevent false positives under excessive glossy reflection (avgV >= 0.85)
+        val isLowRedness = (avgR < 135.0 || rBRatio < 1.12) && !isDarkEdges && avgV < 0.85
+        val isPale = avgS < 0.20 && avgV > illumNorm * 0.96 && avgR < 185.0 && avgV < 0.85
         val hasWhiteSpots = whiteSpotRatio > 0.015
         val isUnevenTexture = (avgLocalVGrad > 0.022 || avgLocalRGrad > 5.5) && !isDarkEdges
 

@@ -113,15 +113,16 @@ object NailClassifier {
                     val relYMin = (safeY + (minY / 200f) * cropH_safe) / height
                     val relYMax = (safeY + (maxY / 200f) * cropH_safe) / height
                     
+                    // Tight bounding box (no margin) to highlight only the exact spot
                     regions.add(com.example.nailnutri.data.SymptomRegion(
                         "white_spots_region_1",
-                        (relXMin - 0.03f).coerceAtLeast(0.1f),
-                        (relYMin - 0.03f).coerceAtLeast(0.1f),
-                        (relXMax + 0.03f).coerceAtMost(0.9f),
-                        (relYMax + 0.03f).coerceAtMost(0.9f)
+                        relXMin.coerceAtLeast(0.1f),
+                        relYMin.coerceAtLeast(0.1f),
+                        relXMax.coerceAtMost(0.9f),
+                        relYMax.coerceAtMost(0.9f)
                     ))
                 } else {
-                    regions.add(com.example.nailnutri.data.SymptomRegion("white_spots_region_2", 0.35f, 0.35f, 0.65f, 0.65f))
+                    regions.add(com.example.nailnutri.data.SymptomRegion("white_spots_region_2", 0.40f, 0.40f, 0.60f, 0.60f))
                 }
             }
             
@@ -138,27 +139,41 @@ object NailClassifier {
                 }
                 
                 val bestCol = (20 until 129).maxByOrNull { colGradients[it] } ?: 75
-                val minX = (bestCol - 15).coerceAtLeast(15)
-                val maxX = (bestCol + 15).coerceAtMost(135)
                 
-                val relXMin = (safeX + (minX / 150f) * cropW_safe) / width
-                val relXMax = (safeX + (maxX / 150f) * cropW_safe) / width
+                // Dynamically scan columns exceeding 1.22x the mean vertical variance
+                val meanGrad = colGradients.average()
+                val thresholdGrad = meanGrad * 1.22
+                var scanMinX = 150
+                var scanMaxX = 0
+                for (x in 20 until 129) {
+                    if (colGradients[x] > thresholdGrad) {
+                        if (x < scanMinX) scanMinX = x
+                        if (x > scanMaxX) scanMaxX = x
+                    }
+                }
+                if (scanMaxX <= scanMinX) {
+                    scanMinX = (bestCol - 6).coerceAtLeast(15)
+                    scanMaxX = (bestCol + 6).coerceAtMost(135)
+                }
+                
+                val relXMin = (safeX + (scanMinX / 150f) * cropW_safe) / width
+                val relXMax = (safeX + (scanMaxX / 150f) * cropW_safe) / width
                 
                 regions.add(com.example.nailnutri.data.SymptomRegion(
                     "vertical_ridges_region",
                     relXMin,
-                    0.25f,
+                    0.28f,
                     relXMax,
-                    0.75f
+                    0.72f
                 ))
             }
             
             "spoon_nails" -> {
-                regions.add(com.example.nailnutri.data.SymptomRegion("spoon_nails_region_1", 0.25f, 0.3f, 0.75f, 0.7f))
+                regions.add(com.example.nailnutri.data.SymptomRegion("spoon_nails_region_1", 0.3f, 0.35f, 0.7f, 0.65f))
             }
             
             "brittle" -> {
-                regions.add(com.example.nailnutri.data.SymptomRegion("brittle_region", 0.2f, 0.15f, 0.8f, 0.45f))
+                regions.add(com.example.nailnutri.data.SymptomRegion("brittle_region", 0.25f, 0.15f, 0.75f, 0.40f))
             }
             
             "onychomycosis" -> {
@@ -206,13 +221,13 @@ object NailClassifier {
                     
                     regions.add(com.example.nailnutri.data.SymptomRegion(
                         "onychomycosis_region_1",
-                        (relXMin - 0.02f).coerceAtLeast(0.1f),
-                        (relYMin - 0.02f).coerceAtLeast(0.1f),
-                        (relXMax + 0.02f).coerceAtMost(0.9f),
-                        (relYMax + 0.02f).coerceAtMost(0.9f)
+                        relXMin.coerceAtLeast(0.1f),
+                        relYMin.coerceAtLeast(0.1f),
+                        relXMax.coerceAtMost(0.9f),
+                        relYMax.coerceAtMost(0.9f)
                     ))
                 } else {
-                    regions.add(com.example.nailnutri.data.SymptomRegion("onychomycosis_region_2", 0.2f, 0.15f, 0.8f, 0.45f))
+                    regions.add(com.example.nailnutri.data.SymptomRegion("onychomycosis_region_2", 0.25f, 0.2f, 0.75f, 0.4f))
                 }
             }
             
@@ -227,8 +242,9 @@ object NailClassifier {
                 }
                 
                 val minCol = (20 until 130).minByOrNull { colSums[it] } ?: 75
-                val minX = (minCol - 8).coerceAtLeast(15)
-                val maxX = (minCol + 8).coerceAtMost(135)
+                // Narrow stripe highlighting (only 4px width to tightly align with the dark stripe)
+                val minX = (minCol - 4).coerceAtLeast(15)
+                val maxX = (minCol + 4).coerceAtMost(135)
                 
                 val relXMin = (safeX + (minX / 150f) * cropW_safe) / width
                 val relXMax = (safeX + (maxX / 150f) * cropW_safe) / width
@@ -236,9 +252,9 @@ object NailClassifier {
                 regions.add(com.example.nailnutri.data.SymptomRegion(
                     "melanonychia_region",
                     relXMin,
-                    0.15f,
+                    0.18f,
                     relXMax,
-                    0.85f
+                    0.82f
                 ))
             }
         }
@@ -300,8 +316,8 @@ object NailClassifier {
             regions.addAll(localizeSymptoms("spoon_nails", bitmap))
         }
         if (features.isPale || features.isLowRedness) {
-            activeConditions.add("brittle")
-            regions.addAll(localizeSymptoms("brittle", bitmap))
+            activeConditions.add("spoon_nails")
+            regions.addAll(localizeSymptoms("spoon_nails", bitmap))
         }
         if (activeConditions.isEmpty()) activeConditions.add("healthy")
 
