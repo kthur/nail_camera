@@ -8,3 +8,9 @@ import kotlinx.serialization.Serializable
 @Serializable data class AnalysisResult(val resultId: String, val isNewScan: Boolean = false) : NavKey
 @Serializable data object History : NavKey
 @Serializable data object Settings : NavKey
+@Serializable data object SensorDashboard : NavKey
+@Serializable data object AnemiaScan : NavKey
+@Serializable data object PpgScan : NavKey
+@Serializable data object LfaScan : NavKey
+@Serializable data object SleepScan : NavKey
+@Serializable data object VoiceScan : NavKey

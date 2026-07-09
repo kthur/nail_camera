@@ -12,6 +12,12 @@ import com.example.nailnutri.ui.scan.CameraScanScreen
 import com.example.nailnutri.ui.result.AnalysisResultScreen
 import com.example.nailnutri.ui.history.HistoryScreen
 import com.example.nailnutri.ui.settings.SettingsScreen
+import com.example.nailnutri.ui.sensor.SensorDashboardScreen
+import com.example.nailnutri.ui.sensor.AnemiaScanScreen
+import com.example.nailnutri.ui.sensor.PpgScanScreen
+import com.example.nailnutri.ui.sensor.LfaScanScreen
+import com.example.nailnutri.ui.sensor.SleepAudioScreen
+import com.example.nailnutri.ui.sensor.VoiceAnalysisScreen
 
 @Composable
 fun MainNavigation(repository: DataRepository) {
@@ -70,6 +76,68 @@ fun MainNavigation(repository: DataRepository) {
           SettingsScreen(
             repository = repository,
             onBackClick = { backStack.removeLastOrNull() },
+            modifier = Modifier.fillMaxSize()
+          )
+        }
+        entry<SensorDashboard> {
+          SensorDashboardScreen(
+            onNavigate = { route -> backStack.add(route) },
+            onBackClick = { backStack.removeLastOrNull() },
+            modifier = Modifier.fillMaxSize()
+          )
+        }
+        entry<AnemiaScan> {
+          AnemiaScanScreen(
+            repository = repository,
+            onBackClick = { backStack.removeLastOrNull() },
+            onAnalysisComplete = { resultId ->
+              backStack.removeLastOrNull()
+              backStack.add(AnalysisResult(resultId = resultId, isNewScan = true))
+            },
+            modifier = Modifier.fillMaxSize()
+          )
+        }
+        entry<PpgScan> {
+          PpgScanScreen(
+            repository = repository,
+            onBackClick = { backStack.removeLastOrNull() },
+            onAnalysisComplete = { resultId ->
+              backStack.removeLastOrNull()
+              backStack.add(AnalysisResult(resultId = resultId, isNewScan = true))
+            },
+            modifier = Modifier.fillMaxSize()
+          )
+        }
+        entry<LfaScan> {
+          LfaScanScreen(
+            repository = repository,
+            onBackClick = { backStack.removeLastOrNull() },
+            onAnalysisComplete = { resultId ->
+              backStack.removeLastOrNull()
+              backStack.add(AnalysisResult(resultId = resultId, isNewScan = true))
+            },
+            modifier = Modifier.fillMaxSize()
+          )
+        }
+        entry<SleepScan> {
+          SleepAudioScreen(
+            repository = repository,
+            onBackClick = { backStack.removeLastOrNull() },
+            onAnalysisComplete = { resultId ->
+              backStack.removeLastOrNull()
+              backStack.add(AnalysisResult(resultId = resultId, isNewScan = true))
+            },
+            modifier = Modifier.fillMaxSize()
+          )
+        }
+        entry<VoiceScan> {
+          VoiceAnalysisScreen(
+            repository = repository,
+            onBackClick = { backStack.removeLastOrNull() },
+            onAnalysisComplete = { resultId ->
+              backStack.removeLastOrNull()
+              backStack.add(AnalysisResult(resultId = resultId, isNewScan = true))
+            },
             modifier = Modifier.fillMaxSize()
           )
         }
