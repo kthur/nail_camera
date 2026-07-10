@@ -66,6 +66,7 @@ fun LfaScanScreen(
 
     var imageCapture by remember { mutableStateOf<ImageCapture?>(null) }
     var isAnalyzing by remember { mutableStateOf(false) }
+    val snackbarHostState = remember { SnackbarHostState() }
 
     val cameraExecutor: ExecutorService = remember { Executors.newSingleThreadExecutor() }
 
@@ -76,6 +77,7 @@ fun LfaScanScreen(
     }
 
     Scaffold(
+        snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
         topBar = {
             TopAppBar(
                 title = { Text("시약 LFA 키트 판독", fontWeight = FontWeight.Bold, color = Color.White) },
@@ -238,9 +240,14 @@ fun LfaScanScreen(
                                                 
                                                 val bitmap = BitmapFactory.decodeFile(photoFile.absolutePath)
                                                 val analysis = KitReader.readKit(bitmap, photoFile.absolutePath)
-                                                repository.saveResult(analysis)
-                                                isAnalyzing = false
-                                                onAnalysisComplete(analysis.id)
+                                                if (analysis.symptoms.any { it.contains("키트 미감지") }) {
+                                                    isAnalyzing = false
+                                                    snackbarHostState.showSnackbar("키트 미감지: 진단 키트를 감지하지 못했습니다.")
+                                                } else {
+                                                    repository.saveResult(analysis)
+                                                    isAnalyzing = false
+                                                    onAnalysisComplete(analysis.id)
+                                                }
                                             }
                                         }
                                         override fun onError(exception: ImageCaptureException) {

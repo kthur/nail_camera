@@ -29,12 +29,38 @@ android {
             keyAlias = System.getenv("ANDROID_KEY_ALIAS") ?: "androiddebugkey"
             keyPassword = System.getenv("ANDROID_KEY_PASSWORD") ?: "android"
         }
+        create("releaseSign") {
+            val debugKeystorePath = System.getenv("ANDROID_KEYSTORE_PATH") 
+                ?: "${System.getProperty("user.home")}/.android/debug.keystore"
+            val debugKeystorePassword = System.getenv("ANDROID_KEYSTORE_PASSWORD") ?: "android"
+            val debugKeyAlias = System.getenv("ANDROID_KEY_ALIAS") ?: "androiddebugkey"
+            val debugKeyPassword = System.getenv("ANDROID_KEY_PASSWORD") ?: "android"
+            
+            val ksPath = System.getenv("RELEASE_KEYSTORE_PATH")
+            val ksPassword = System.getenv("RELEASE_KEYSTORE_PASSWORD")
+            val kAlias = System.getenv("RELEASE_KEY_ALIAS")
+            val kPassword = System.getenv("RELEASE_KEY_PASSWORD")
+            
+            val keystoreFile = if (!ksPath.isNullOrEmpty()) file(ksPath) else null
+            
+            if (keystoreFile != null && keystoreFile.exists() && !ksPassword.isNullOrEmpty() && !kAlias.isNullOrEmpty() && !kPassword.isNullOrEmpty()) {
+                storeFile = keystoreFile
+                storePassword = ksPassword
+                keyAlias = kAlias
+                keyPassword = kPassword
+            } else {
+                storeFile = file(debugKeystorePath)
+                storePassword = debugKeystorePassword
+                keyAlias = debugKeyAlias
+                keyPassword = debugKeyPassword
+            }
+        }
     }
 
     buildTypes {
         release {
             isMinifyEnabled = false
-            signingConfig = signingConfigs["debugSign"]
+            signingConfig = signingConfigs["releaseSign"]
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
             firebaseAppDistribution {
                 artifactType = "APK"

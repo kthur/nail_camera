@@ -242,7 +242,7 @@ fun PpgScanScreen(
                 ) {
                     Text(
                         text = if (isFingerDetected) "지속적으로 손가락을 대주세요" else "후면 카메라와 플래시 렌즈에\n검지 손가락 끝을 밀착해 대주세요",
-                        color = Color.White,
+                        color = if (isFingerDetected) Color(0xFF34D399) else Color(0xFF94A3B8),
                         fontSize = 17.sp,
                         fontWeight = FontWeight.Bold,
                         textAlign = androidx.compose.ui.text.style.TextAlign.Center,

@@ -17,6 +17,34 @@ object ConjunctivaAnalyzer {
         val height = bitmap.height
         if (width <= 0 || height <= 0) return buildHealthyResult(imagePath)
 
+        // Calculate average luma
+        var totalLuma = 0.0
+        var lumaCount = 0
+        for (y in 0 until height step 4) {
+            for (x in 0 until width step 4) {
+                val pixel = bitmap.getPixel(x, y)
+                val r = Color.red(pixel)
+                val g = Color.green(pixel)
+                val b = Color.blue(pixel)
+                val luma = 0.299 * r + 0.587 * g + 0.114 * b
+                totalLuma += luma
+                lumaCount++
+            }
+        }
+        val avgLuma = if (lumaCount > 0) totalLuma / lumaCount else 0.0
+        if (avgLuma < 40.0 || avgLuma > 220.0) {
+            val dateStr = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault()).format(Date())
+            return NailAnalysisResult(
+                id = UUID.randomUUID().toString(),
+                date = dateStr,
+                imagePath = imagePath,
+                symptoms = listOf("조도 부적합"),
+                deficientNutrients = emptyList(),
+                sufficientNutrients = emptyList(),
+                overallAdvice = "촬영 환경의 조도가 너무 어둡거나 밝습니다. 적절한 조도에서 다시 촬영해 주세요."
+            )
+        }
+
         // 1. White Balance Normalization via Sclera Detection
         var scleraR = 0.0; var scleraG = 0.0; var scleraB = 0.0
         var scleraCount = 0

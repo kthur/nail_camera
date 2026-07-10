@@ -63,6 +63,7 @@ fun AnemiaScanScreen(
 
     var imageCapture by remember { mutableStateOf<ImageCapture?>(null) }
     var isAnalyzing by remember { mutableStateOf(false) }
+    val snackbarHostState = remember { SnackbarHostState() }
 
     val cameraExecutor: ExecutorService = remember { Executors.newSingleThreadExecutor() }
 
@@ -73,6 +74,7 @@ fun AnemiaScanScreen(
     }
 
     Scaffold(
+        snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
         topBar = {
             TopAppBar(
                 title = { Text("결막 안구 빈혈 자가 검사", fontWeight = FontWeight.Bold, color = Color.White) },
@@ -228,9 +230,14 @@ fun AnemiaScanScreen(
                                             scope.launch {
                                                 val bitmap = BitmapFactory.decodeFile(photoFile.absolutePath)
                                                 val analysis = ConjunctivaAnalyzer.analyze(bitmap, photoFile.absolutePath)
-                                                repository.saveResult(analysis)
-                                                isAnalyzing = false
-                                                onAnalysisComplete(analysis.id)
+                                                if (analysis.symptoms.any { it.contains("조도 부적합") }) {
+                                                    isAnalyzing = false
+                                                    snackbarHostState.showSnackbar("조도 부적합: 촬영 환경의 조도를 확인해 주세요.")
+                                                } else {
+                                                    repository.saveResult(analysis)
+                                                    isAnalyzing = false
+                                                    onAnalysisComplete(analysis.id)
+                                                }
                                             }
                                         }
                                         override fun onError(exception: ImageCaptureException) {

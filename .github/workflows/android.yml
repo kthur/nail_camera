@@ -49,7 +49,15 @@ jobs:
         groups: testers
         file: app/build/outputs/apk/debug/app-debug.apk
 
+    - name: Decode Keystore
+      run: echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 --decode > app/release.jks
+
     - name: Build Release APK (signed)
+      env:
+        RELEASE_KEYSTORE_PATH: release.jks
+        RELEASE_KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+        RELEASE_KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+        RELEASE_KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
       run: ./gradlew assembleRelease
 
     - name: Upload APK Artifacts
