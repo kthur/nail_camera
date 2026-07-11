@@ -2,12 +2,16 @@ package com.example.nailnutri
 
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
+import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.navigation3.runtime.NavKey
 import androidx.navigation3.runtime.entryProvider
 import androidx.navigation3.runtime.rememberNavBackStack
 import androidx.navigation3.ui.NavDisplay
 import com.example.nailnutri.data.DataRepository
 import com.example.nailnutri.ui.home.HomeScreen
+import com.example.nailnutri.ui.onboarding.OnboardingScreen
 import com.example.nailnutri.ui.scan.CameraScanScreen
 import com.example.nailnutri.ui.result.AnalysisResultScreen
 import com.example.nailnutri.ui.history.HistoryScreen
@@ -18,29 +22,41 @@ import com.example.nailnutri.ui.sensor.PpgScanScreen
 import com.example.nailnutri.ui.sensor.LfaScanScreen
 import com.example.nailnutri.ui.sensor.SleepAudioScreen
 import com.example.nailnutri.ui.sensor.VoiceAnalysisScreen
+import com.example.nailnutri.viewmodel.MainViewModel
+import kotlinx.coroutines.launch
 
 @Composable
-fun MainNavigation(repository: DataRepository) {
-  val backStack = rememberNavBackStack(Home)
+fun MainNavigation(repository: DataRepository, initialRoute: NavKey = Home) {
+  val backStack = rememberNavBackStack(initialRoute)
+  val scope = rememberCoroutineScope()
+  val mainViewModel: MainViewModel = viewModel(factory = MainViewModel.Factory(repository))
 
   NavDisplay(
     backStack = backStack,
     onBack = { backStack.removeLastOrNull() },
     entryProvider =
       entryProvider {
+        entry<Onboarding> {
+          OnboardingScreen(
+            onComplete = {
+              scope.launch { repository.setOnboardingDone(true) }
+              backStack.removeLastOrNull()
+              backStack.add(Home)
+            }
+          )
+        }
         entry<Home> {
           HomeScreen(
-            repository = repository,
+            viewModel = mainViewModel,
             onNavigate = { route -> backStack.add(route) },
             modifier = Modifier.fillMaxSize()
           )
         }
         entry<CameraScan> {
           CameraScanScreen(
-            repository = repository,
+            viewModel = mainViewModel,
             onBackClick = { backStack.removeLastOrNull() },
             onAnalysisComplete = { resultId ->
-              // Pop scan screen, then push result
               backStack.removeLastOrNull()
               backStack.add(AnalysisResult(resultId = resultId, isNewScan = true))
             },
@@ -51,20 +67,17 @@ fun MainNavigation(repository: DataRepository) {
           AnalysisResultScreen(
             resultId = key.resultId,
             isNewScan = key.isNewScan,
-            repository = repository,
+            viewModel = mainViewModel,
             onBackClick = { backStack.removeLastOrNull() },
             onNavigateToHome = {
-              // Clear stack down to Home
-              while (backStack.size > 1) {
-                backStack.removeLastOrNull()
-              }
+              while (backStack.size > 1) { backStack.removeLastOrNull() }
             },
             modifier = Modifier.fillMaxSize()
           )
         }
         entry<History> {
           HistoryScreen(
-            repository = repository,
+            viewModel = mainViewModel,
             onResultClick = { resultId ->
               backStack.add(AnalysisResult(resultId = resultId, isNewScan = false))
             },
@@ -74,7 +87,7 @@ fun MainNavigation(repository: DataRepository) {
         }
         entry<Settings> {
           SettingsScreen(
-            repository = repository,
+            viewModel = mainViewModel,
             onBackClick = { backStack.removeLastOrNull() },
             modifier = Modifier.fillMaxSize()
           )

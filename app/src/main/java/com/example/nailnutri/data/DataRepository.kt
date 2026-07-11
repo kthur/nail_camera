@@ -15,6 +15,10 @@ interface DataRepository {
     val gemmaModelPath: Flow<String>
     val useGemma: Flow<Boolean>
     val useOnDeviceVision: Flow<Boolean>
+    val onboardingDone: Flow<Boolean>
+    val isDarkTheme: Flow<Boolean>
+    val useDynamicColor: Flow<Boolean>
+    val reminderEnabled: Flow<Boolean>
 
     suspend fun saveResult(result: NailAnalysisResult)
     suspend fun clearHistory()
@@ -24,6 +28,10 @@ interface DataRepository {
     suspend fun setGemmaModelPath(path: String)
     suspend fun setUseGemma(enabled: Boolean)
     suspend fun setUseOnDeviceVision(enabled: Boolean)
+    suspend fun setOnboardingDone(done: Boolean)
+    suspend fun setDarkTheme(enabled: Boolean)
+    suspend fun setUseDynamicColor(enabled: Boolean)
+    suspend fun setReminderEnabled(enabled: Boolean)
 }
 
 class DefaultDataRepository(context: Context) : DataRepository {
@@ -36,7 +44,7 @@ class DefaultDataRepository(context: Context) : DataRepository {
     private val _apiKey = MutableStateFlow("")
     override val apiKey = _apiKey.asStateFlow()
 
-    private val _isMockMode = MutableStateFlow(true) // Default to Mock Mode for testing
+    private val _isMockMode = MutableStateFlow(true)
     override val isMockMode = _isMockMode.asStateFlow()
 
     private val _gemmaModelPath = MutableStateFlow("/data/local/tmp/gemma.bin")
@@ -47,6 +55,18 @@ class DefaultDataRepository(context: Context) : DataRepository {
 
     private val _useOnDeviceVision = MutableStateFlow(false)
     override val useOnDeviceVision = _useOnDeviceVision.asStateFlow()
+
+    private val _onboardingDone = MutableStateFlow(false)
+    override val onboardingDone = _onboardingDone.asStateFlow()
+
+    private val _isDarkTheme = MutableStateFlow(false)
+    override val isDarkTheme = _isDarkTheme.asStateFlow()
+
+    private val _useDynamicColor = MutableStateFlow(false)
+    override val useDynamicColor = _useDynamicColor.asStateFlow()
+
+    private val _reminderEnabled = MutableStateFlow(false)
+    override val reminderEnabled = _reminderEnabled.asStateFlow()
 
     init {
         loadData()
@@ -66,6 +86,10 @@ class DefaultDataRepository(context: Context) : DataRepository {
         _gemmaModelPath.value = prefs.getString("gemma_model_path", "/data/local/tmp/gemma.bin") ?: "/data/local/tmp/gemma.bin"
         _useGemma.value = prefs.getBoolean("use_gemma", false)
         _useOnDeviceVision.value = prefs.getBoolean("use_on_device_vision", false)
+        _onboardingDone.value = prefs.getBoolean("onboarding_done", false)
+        _isDarkTheme.value = prefs.getBoolean("is_dark_theme", false)
+        _useDynamicColor.value = prefs.getBoolean("use_dynamic_color", false)
+        _reminderEnabled.value = prefs.getBoolean("reminder_enabled", false)
     }
 
     override suspend fun saveResult(result: NailAnalysisResult) {
@@ -109,6 +133,26 @@ class DefaultDataRepository(context: Context) : DataRepository {
     override suspend fun setUseOnDeviceVision(enabled: Boolean) {
         prefs.edit().putBoolean("use_on_device_vision", enabled).apply()
         _useOnDeviceVision.value = enabled
+    }
+
+    override suspend fun setOnboardingDone(done: Boolean) {
+        prefs.edit().putBoolean("onboarding_done", done).apply()
+        _onboardingDone.value = done
+    }
+
+    override suspend fun setDarkTheme(enabled: Boolean) {
+        prefs.edit().putBoolean("is_dark_theme", enabled).apply()
+        _isDarkTheme.value = enabled
+    }
+
+    override suspend fun setUseDynamicColor(enabled: Boolean) {
+        prefs.edit().putBoolean("use_dynamic_color", enabled).apply()
+        _useDynamicColor.value = enabled
+    }
+
+    override suspend fun setReminderEnabled(enabled: Boolean) {
+        prefs.edit().putBoolean("reminder_enabled", enabled).apply()
+        _reminderEnabled.value = enabled
     }
 
     private fun saveHistoryList(list: List<NailAnalysisResult>) {

@@ -49,7 +49,7 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.nailnutri.analysis.GeminiAnalyzer
 import com.example.nailnutri.analysis.NailClassifier
-import com.example.nailnutri.data.DataRepository
+import com.example.nailnutri.viewmodel.MainViewModel
 import com.example.nailnutri.theme.NutriGreen
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
@@ -61,18 +61,18 @@ import kotlin.coroutines.resumeWithException
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CameraScanScreen(
-    repository: DataRepository,
+    viewModel: MainViewModel,
     onBackClick: () -> Unit,
     onAnalysisComplete: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
-    val isMockMode by repository.isMockMode.collectAsStateWithLifecycle(initialValue = true)
-    val apiKey by repository.apiKey.collectAsStateWithLifecycle(initialValue = "")
-    val useGemma by repository.useGemma.collectAsStateWithLifecycle(initialValue = false)
-    val useOnDeviceVision by repository.useOnDeviceVision.collectAsStateWithLifecycle(initialValue = false)
-    val gemmaModelPath by repository.gemmaModelPath.collectAsStateWithLifecycle(initialValue = "/data/local/tmp/gemma.bin")
+    val isMockMode by viewModel.isMockMode.collectAsStateWithLifecycle(initialValue = true)
+    val apiKey by viewModel.apiKey.collectAsStateWithLifecycle(initialValue = "")
+    val useGemma by viewModel.useGemma.collectAsStateWithLifecycle(initialValue = false)
+    val useOnDeviceVision by viewModel.useOnDeviceVision.collectAsStateWithLifecycle(initialValue = false)
+    val gemmaModelPath by viewModel.gemmaModelPath.collectAsStateWithLifecycle(initialValue = "/data/local/tmp/gemma.bin")
 
     var hasCameraPermission by remember {
         mutableStateOf(
@@ -266,7 +266,7 @@ fun CameraScanScreen(
                                         if (isMockMode) {
                                             triggerMockAnalysis(
                                                 "healthy",
-                                                repository,
+                                                viewModel,
                                                 coroutineScope,
                                                 onAnalysisComplete
                                             )
@@ -330,7 +330,7 @@ fun CameraScanScreen(
                                                             imagePath = finalFile.absolutePath,
                                                             context = context
                                                         )
-                                                        repository.saveResult(result)
+                                                        viewModel.saveResult(result)
                                                         onAnalysisComplete(result.id)
                                                     } else if (useGemma) {
                                                         val result = com.example.nailnutri.analysis.GemmaAnalyzer.analyzeNail(
@@ -339,7 +339,7 @@ fun CameraScanScreen(
                                                             modelPath = gemmaModelPath,
                                                             imagePath = finalFile.absolutePath
                                                         )
-                                                        repository.saveResult(result)
+                                                        viewModel.saveResult(result)
                                                         onAnalysisComplete(result.id)
                                                     } else {
                                                         val result = GeminiAnalyzer.analyzeNail(
@@ -347,7 +347,7 @@ fun CameraScanScreen(
                                                             apiKey = apiKey,
                                                             imagePath = finalFile.absolutePath
                                                         )
-                                                        repository.saveResult(result)
+                                                        viewModel.saveResult(result)
                                                         onAnalysisComplete(result.id)
                                                     }
                                                 } catch (e: Exception) {
@@ -387,7 +387,7 @@ fun CameraScanScreen(
                                     kotlinx.coroutines.delay(1500)
                                     triggerMockAnalysis(
                                         condition,
-                                        repository,
+                                        viewModel,
                                         coroutineScope,
                                         onAnalysisComplete
                                     )
@@ -663,13 +663,13 @@ private fun captureImage(
 
 private fun triggerMockAnalysis(
     condition: String,
-    repository: DataRepository,
+    viewModel: MainViewModel,
     coroutineScope: CoroutineScope,
     onAnalysisComplete: (String) -> Unit
 ) {
     coroutineScope.launch {
         val result = NailClassifier.buildResultForCondition(condition, "demo_$condition")
-        repository.saveResult(result)
+        viewModel.saveResult(result)
         onAnalysisComplete(result.id)
     }
 }

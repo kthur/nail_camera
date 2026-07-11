@@ -24,7 +24,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.example.nailnutri.data.DataRepository
+import com.example.nailnutri.viewmodel.MainViewModel
 import com.example.nailnutri.data.NailAnalysisResult
 import com.example.nailnutri.theme.NutriAmber
 import com.example.nailnutri.theme.NutriCoral
@@ -34,12 +34,12 @@ import kotlinx.coroutines.launch
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HistoryScreen(
-    repository: DataRepository,
+    viewModel: MainViewModel,
     onResultClick: (String) -> Unit,
     onBackClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val historyList by repository.history.collectAsStateWithLifecycle(initialValue = emptyList())
+    val historyList by viewModel.history.collectAsStateWithLifecycle()
     val sortedHistoryList = remember(historyList) { historyList.sortedByDescending { it.date } }
     val coroutineScope = rememberCoroutineScope()
     
@@ -124,9 +124,7 @@ fun HistoryScreen(
                             result = result,
                             onClick = { onResultClick(result.id) },
                             onDelete = {
-                                coroutineScope.launch {
-                                    repository.deleteResult(result.id)
-                                }
+                                viewModel.deleteResult(result.id)
                             }
                         )
                     }
@@ -142,10 +140,8 @@ fun HistoryScreen(
                     confirmButton = {
                         TextButton(
                             onClick = {
-                                coroutineScope.launch {
-                                    repository.clearHistory()
-                                    showClearDialog = false
-                                }
+                                viewModel.clearHistory()
+                                showClearDialog = false
                             },
                             colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
                         ) {

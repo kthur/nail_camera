@@ -20,7 +20,7 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.example.nailnutri.data.DataRepository
+import com.example.nailnutri.viewmodel.MainViewModel
 import kotlinx.coroutines.launch
 import java.io.File
 import java.io.FileOutputStream
@@ -32,16 +32,19 @@ import kotlinx.coroutines.withContext
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
-    repository: DataRepository,
+    viewModel: MainViewModel,
     onBackClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val context = androidx.compose.ui.platform.LocalContext.current
-    val apiKey by repository.apiKey.collectAsStateWithLifecycle(initialValue = "")
-    val isMockMode by repository.isMockMode.collectAsStateWithLifecycle(initialValue = true)
-    val useGemma by repository.useGemma.collectAsStateWithLifecycle(initialValue = false)
-    val useOnDeviceVision by repository.useOnDeviceVision.collectAsStateWithLifecycle(initialValue = false)
-    val gemmaModelPath by repository.gemmaModelPath.collectAsStateWithLifecycle(initialValue = "/data/local/tmp/gemma.bin")
+    val apiKey by viewModel.apiKey.collectAsStateWithLifecycle(initialValue = "")
+    val isMockMode by viewModel.isMockMode.collectAsStateWithLifecycle(initialValue = true)
+    val useGemma by viewModel.useGemma.collectAsStateWithLifecycle(initialValue = false)
+    val useOnDeviceVision by viewModel.useOnDeviceVision.collectAsStateWithLifecycle(initialValue = false)
+    val gemmaModelPath by viewModel.gemmaModelPath.collectAsStateWithLifecycle(initialValue = "/data/local/tmp/gemma.bin")
+    val isDarkTheme by viewModel.isDarkTheme.collectAsStateWithLifecycle(initialValue = false)
+    val useDynamicColor by viewModel.useDynamicColor.collectAsStateWithLifecycle(initialValue = false)
+    val reminderEnabled by viewModel.reminderEnabled.collectAsStateWithLifecycle(initialValue = false)
     
     var inputKey by remember(apiKey) { mutableStateOf(apiKey) }
     var mockEnabled by remember(isMockMode) { mutableStateOf(isMockMode) }
@@ -113,7 +116,7 @@ fun SettingsScreen(
                             onCheckedChange = {
                                 mockEnabled = it
                                 coroutineScope.launch {
-                                    repository.setMockMode(it)
+                                    viewModel.setMockMode(it)
                                     snackbarHostState.showSnackbar(
                                         if (it) "데모 모드가 활성화되었습니다." else "실제 API 분석 모드가 활성화되었습니다."
                                     )
@@ -153,8 +156,8 @@ fun SettingsScreen(
                             .fillMaxWidth()
                             .clickable {
                                 coroutineScope.launch {
-                                    repository.setUseGemma(false)
-                                    repository.setUseOnDeviceVision(false)
+                                    viewModel.setUseGemma(false)
+                                    viewModel.setUseOnDeviceVision(false)
                                     snackbarHostState.showSnackbar("클라우드 Gemini 분석 모드가 설정되었습니다.")
                                 }
                             }
@@ -164,8 +167,8 @@ fun SettingsScreen(
                             selected = !useGemma && !useOnDeviceVision,
                             onClick = {
                                 coroutineScope.launch {
-                                    repository.setUseGemma(false)
-                                    repository.setUseOnDeviceVision(false)
+                                    viewModel.setUseGemma(false)
+                                    viewModel.setUseOnDeviceVision(false)
                                     snackbarHostState.showSnackbar("클라우드 Gemini 분석 모드가 설정되었습니다.")
                                 }
                             }
@@ -184,8 +187,8 @@ fun SettingsScreen(
                             .fillMaxWidth()
                             .clickable {
                                 coroutineScope.launch {
-                                    repository.setUseGemma(false)
-                                    repository.setUseOnDeviceVision(true)
+                                    viewModel.setUseGemma(false)
+                                    viewModel.setUseOnDeviceVision(true)
                                     snackbarHostState.showSnackbar("온디바이스 TFLite 비전 모드가 설정되었습니다.")
                                 }
                             }
@@ -195,8 +198,8 @@ fun SettingsScreen(
                             selected = !useGemma && useOnDeviceVision,
                             onClick = {
                                 coroutineScope.launch {
-                                    repository.setUseGemma(false)
-                                    repository.setUseOnDeviceVision(true)
+                                    viewModel.setUseGemma(false)
+                                    viewModel.setUseOnDeviceVision(true)
                                     snackbarHostState.showSnackbar("온디바이스 TFLite 비전 모드가 설정되었습니다.")
                                 }
                             }
@@ -215,8 +218,8 @@ fun SettingsScreen(
                             .fillMaxWidth()
                             .clickable {
                                 coroutineScope.launch {
-                                    repository.setUseGemma(true)
-                                    repository.setUseOnDeviceVision(false)
+                                    viewModel.setUseGemma(true)
+                                    viewModel.setUseOnDeviceVision(false)
                                     snackbarHostState.showSnackbar("온디바이스 Gemma LLM 분석 모드가 설정되었습니다.")
                                 }
                             }
@@ -226,8 +229,8 @@ fun SettingsScreen(
                             selected = useGemma && !useOnDeviceVision,
                             onClick = {
                                 coroutineScope.launch {
-                                    repository.setUseGemma(true)
-                                    repository.setUseOnDeviceVision(false)
+                                    viewModel.setUseGemma(true)
+                                    viewModel.setUseOnDeviceVision(false)
                                     snackbarHostState.showSnackbar("온디바이스 Gemma LLM 분석 모드가 설정되었습니다.")
                                 }
                             }
@@ -289,7 +292,7 @@ fun SettingsScreen(
                             Button(
                                 onClick = {
                                     coroutineScope.launch {
-                                        repository.setApiKey(inputKey)
+                                        viewModel.setApiKey(inputKey)
                                         snackbarHostState.showSnackbar("API 키가 저장되었습니다.")
                                     }
                                 },
@@ -478,7 +481,7 @@ fun SettingsScreen(
                                                 isDownloading = false
                                                 modelPathInput = absolutePath
                                                 coroutineScope.launch {
-                                                    repository.setGemmaModelPath(absolutePath)
+                                                    viewModel.setGemmaModelPath(absolutePath)
                                                     snackbarHostState.showSnackbar("Gemma 모델 다운로드 및 경로 저장 완료!")
                                                 }
                                             },
@@ -525,7 +528,7 @@ fun SettingsScreen(
                             Button(
                                 onClick = {
                                     coroutineScope.launch {
-                                        repository.setGemmaModelPath(modelPathInput)
+                                        viewModel.setGemmaModelPath(modelPathInput)
                                         snackbarHostState.showSnackbar("Gemma 모델 경로가 저장되었습니다.")
                                     }
                                 },
@@ -579,6 +582,95 @@ fun SettingsScreen(
                                 )
                             }
                         }
+                    }
+                }
+            }
+
+            // Info Card
+
+            // Display Settings
+            Card(
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+            ) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Text(
+                        text = "화면 설정",
+                        style = MaterialTheme.typography.titleMedium
+                    )
+
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("다크 모드", style = MaterialTheme.typography.bodyLarge)
+                            Text(
+                                "어두운 배경의 테마를 사용합니다.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                            )
+                        }
+                        Switch(
+                            checked = isDarkTheme,
+                            onCheckedChange = { coroutineScope.launch { viewModel.setDarkTheme(it) } }
+                        )
+                    }
+
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("다이나믹 컬러 (Android 12+)", style = MaterialTheme.typography.bodyLarge)
+                            Text(
+                                "배경화면 기반의 색상 테마를 적용합니다.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                            )
+                        }
+                        Switch(
+                            checked = useDynamicColor,
+                            onCheckedChange = { coroutineScope.launch { viewModel.setUseDynamicColor(it) } }
+                        )
+                    }
+
+                    HorizontalDivider(
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f),
+                        modifier = Modifier.padding(vertical = 4.dp)
+                    )
+
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("3일 주기 알림", style = MaterialTheme.typography.bodyLarge)
+                            Text(
+                                "정기적인 손톱 분석을 위한 리마인더를 보냅니다.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                            )
+                        }
+                        Switch(
+                            checked = reminderEnabled,
+                            onCheckedChange = { enabled ->
+                                coroutineScope.launch {
+                                    viewModel.setReminderEnabled(enabled)
+                                    if (enabled) {
+                                        com.example.nailnutri.worker.NailCheckReminderWorker.schedule(context)
+                                        snackbarHostState.showSnackbar("3일마다 알림이 전송됩니다.")
+                                    } else {
+                                        com.example.nailnutri.worker.NailCheckReminderWorker.cancel(context)
+                                        snackbarHostState.showSnackbar("알림이 취소되었습니다.")
+                                    }
+                                }
+                            }
+                        )
                     }
                 }
             }

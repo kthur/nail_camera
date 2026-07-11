@@ -28,7 +28,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.nailnutri.CameraScan
 import com.example.nailnutri.History
 import com.example.nailnutri.Settings
-import com.example.nailnutri.data.DataRepository
+import com.example.nailnutri.viewmodel.MainViewModel
 import com.example.nailnutri.data.NailAnalysisResult
 import com.example.nailnutri.theme.*
 import androidx.navigation3.runtime.NavKey
@@ -36,12 +36,12 @@ import androidx.navigation3.runtime.NavKey
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HomeScreen(
-    repository: DataRepository,
+    viewModel: MainViewModel,
     onNavigate: (NavKey) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val historyList by repository.history.collectAsStateWithLifecycle(initialValue = emptyList())
-    val isMockMode by repository.isMockMode.collectAsStateWithLifecycle(initialValue = true)
+    val historyList by viewModel.history.collectAsStateWithLifecycle()
+    val isMockMode by viewModel.isMockMode.collectAsStateWithLifecycle(initialValue = true)
 
     val scrollState = rememberScrollState()
 

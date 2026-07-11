@@ -9,11 +9,11 @@
 ## Milestones
 | # | Name | Scope | Dependencies | Status |
 |---|------|-------|-------------|--------|
-| 1 | E2E/Verification Test Suite | Create JUnit unit/integration tests for R1, R2, R3 | none | IN_PROGRESS |
-| 2 | R1: History UX Completion | Date-sorted cards, badges, navigation, and Canvas trend chart | M1 | IN_PROGRESS |
-| 3 | R2: Sensor Quality Guards | Luma checks, button state, kit reader SD threshold, error alerts | M1 | IN_PROGRESS |
-| 4 | R3: CI/CD Release Signing | android.yml keystore setup, build.gradle.kts signingConfigs fallback | M1 | IN_PROGRESS |
-| 5 | Verification & Forensic Audit | Run verification tests, build app, run forensic integrity audit | M2, M3, M4 | PLANNED |
+| 1 | E2E/Verification Test Suite | Create JUnit unit/integration tests for R1, R2, R3 | none | DONE |
+| 2 | R1: History UX Completion | Date-sorted cards, badges, navigation, and Canvas trend chart | M1 | DONE |
+| 3 | R2: Sensor Quality Guards | Luma checks, button state, kit reader SD threshold, error alerts | M1 | DONE |
+| 4 | R3: CI/CD Release Signing | android.yml keystore setup, build.gradle.kts signingConfigs fallback | M1 | DONE |
+| 5 | Verification & Forensic Audit | Run verification tests, build app, run forensic integrity audit | M2, M3, M4 | DONE |
 
 ## Interface Contracts
 ### `ConjunctivaAnalyzer.analyze()`

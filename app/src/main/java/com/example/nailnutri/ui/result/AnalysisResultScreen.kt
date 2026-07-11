@@ -29,7 +29,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.example.nailnutri.data.DataRepository
+import com.example.nailnutri.viewmodel.MainViewModel
 import com.example.nailnutri.data.NailAnalysisResult
 import com.example.nailnutri.theme.*
 import java.io.File
@@ -39,12 +39,12 @@ import java.io.File
 fun AnalysisResultScreen(
     resultId: String,
     isNewScan: Boolean,
-    repository: DataRepository,
+    viewModel: MainViewModel,
     onBackClick: () -> Unit,
     onNavigateToHome: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val historyList by repository.history.collectAsStateWithLifecycle(initialValue = emptyList())
+    val historyList by viewModel.history.collectAsStateWithLifecycle()
     val result = remember(historyList, resultId) {
         historyList.find { it.id == resultId }
     }

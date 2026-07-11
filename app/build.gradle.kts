@@ -160,6 +160,13 @@ configurations.all {
 
   // Kotlinx Serialization JSON
   implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.6.3")
+
+  // WorkManager
+  implementation(libs.work.runtime.ktx)
+
+  // Room
+  implementation(libs.room.runtime)
+  implementation(libs.room.ktx)
 }
 
 // ---------------------------------------------------------------------------
