@@ -15,3 +15,6 @@ import kotlinx.serialization.Serializable
 @Serializable data object LfaScan : NavKey
 @Serializable data object SleepScan : NavKey
 @Serializable data object VoiceScan : NavKey
+@Serializable data class SessionReportScreen(val sessionId: String) : NavKey
+@Serializable data object SessionListNavKey : NavKey
+

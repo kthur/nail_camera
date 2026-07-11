@@ -10,6 +10,7 @@ import kotlinx.serialization.encodeToString
 
 interface DataRepository {
     val history: Flow<List<NailAnalysisResult>>
+    val sessions: Flow<List<SessionReport>>
     val apiKey: Flow<String>
     val isMockMode: Flow<Boolean>
     val gemmaModelPath: Flow<String>
@@ -32,6 +33,9 @@ interface DataRepository {
     suspend fun setDarkTheme(enabled: Boolean)
     suspend fun setUseDynamicColor(enabled: Boolean)
     suspend fun setReminderEnabled(enabled: Boolean)
+    suspend fun saveSession(report: SessionReport)
+    suspend fun deleteSession(id: String)
+    suspend fun clearSessions()
 }
 
 class DefaultDataRepository(context: Context) : DataRepository {
@@ -40,6 +44,9 @@ class DefaultDataRepository(context: Context) : DataRepository {
 
     private val _history = MutableStateFlow<List<NailAnalysisResult>>(emptyList())
     override val history = _history.asStateFlow()
+
+    private val _sessions = MutableStateFlow<List<SessionReport>>(emptyList())
+    override val sessions = _sessions.asStateFlow()
 
     private val _apiKey = MutableStateFlow("")
     override val apiKey = _apiKey.asStateFlow()
@@ -79,6 +86,13 @@ class DefaultDataRepository(context: Context) : DataRepository {
             _history.value = list.sortedByDescending { it.date }
         } catch (e: Exception) {
             _history.value = emptyList()
+        }
+
+        val sessionsJson = prefs.getString("session_reports", "[]") ?: "[]"
+        try {
+            _sessions.value = json.decodeFromString<List<SessionReport>>(sessionsJson).sortedByDescending { it.createdAt }
+        } catch (e: Exception) {
+            _sessions.value = emptyList()
         }
 
         _apiKey.value = prefs.getString("api_key", "") ?: ""
@@ -160,5 +174,28 @@ class DefaultDataRepository(context: Context) : DataRepository {
         _history.value = sortedList
         val historyJson = json.encodeToString(sortedList)
         prefs.edit().putString("scan_history", historyJson).apply()
+    }
+
+    override suspend fun saveSession(report: SessionReport) {
+        val list = _sessions.value.toMutableList()
+        list.removeAll { it.id == report.id }
+        list.add(0, report)
+        saveSessionList(list)
+    }
+
+    override suspend fun deleteSession(id: String) {
+        val list = _sessions.value.toMutableList()
+        list.removeAll { it.id == id }
+        saveSessionList(list)
+    }
+
+    override suspend fun clearSessions() {
+        saveSessionList(emptyList())
+    }
+
+    private fun saveSessionList(list: List<SessionReport>) {
+        val sorted = list.sortedByDescending { it.createdAt }
+        _sessions.value = sorted
+        prefs.edit().putString("session_reports", json.encodeToString(sorted)).apply()
     }
 }

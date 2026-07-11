@@ -22,6 +22,8 @@ import com.example.nailnutri.ui.sensor.PpgScanScreen
 import com.example.nailnutri.ui.sensor.LfaScanScreen
 import com.example.nailnutri.ui.sensor.SleepAudioScreen
 import com.example.nailnutri.ui.sensor.VoiceAnalysisScreen
+import com.example.nailnutri.ui.report.SessionListScreen
+import com.example.nailnutri.ui.report.SessionReportScreen
 import com.example.nailnutri.viewmodel.MainViewModel
 import kotlinx.coroutines.launch
 
@@ -151,6 +153,25 @@ fun MainNavigation(repository: DataRepository, initialRoute: NavKey = Home) {
               backStack.removeLastOrNull()
               backStack.add(AnalysisResult(resultId = resultId, isNewScan = true))
             },
+            modifier = Modifier.fillMaxSize()
+          )
+        }
+        entry<SessionListNavKey> {
+          SessionListScreen(
+            repository = repository,
+            onSessionClick = { sessionId ->
+              backStack.add(SessionReportScreen(sessionId = sessionId))
+            },
+            onBackClick = { backStack.removeLastOrNull() },
+            modifier = Modifier.fillMaxSize()
+          )
+        }
+        entry<SessionReportScreen> { key ->
+          SessionReportScreen(
+            sessionId = key.sessionId,
+            repository = repository,
+            onBackClick = { backStack.removeLastOrNull() },
+            onDeleteSession = { backStack.removeLastOrNull() },
             modifier = Modifier.fillMaxSize()
           )
         }

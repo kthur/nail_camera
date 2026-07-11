@@ -27,6 +27,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation3.runtime.NavKey
 import com.example.nailnutri.*
+import androidx.compose.material.icons.filled.Assessment
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -108,7 +109,20 @@ fun SensorDashboardScreen(
                 iconTint = Color(0xFFFBBF24),
                 onClick = { onNavigate(VoiceScan) }
             )
-            
+
+            HorizontalDivider(
+                modifier = Modifier.padding(vertical = 8.dp),
+                color = Color.White.copy(alpha = 0.08f)
+            )
+
+            SensorCard(
+                title = "📊 종합 세션 리포트",
+                description = "여러 센서 측정 결과를 하나로 묶어 영양 건강 점수와 주요 결핍 영양소를 종합 분석하고 공유합니다.",
+                icon = Icons.Default.Assessment,
+                iconTint = Color(0xFF818CF8),
+                onClick = { onNavigate(SessionListNavKey) }
+            )
+
             Spacer(modifier = Modifier.height(30.dp))
         }
     }
