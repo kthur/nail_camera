@@ -54,6 +54,8 @@ object TFLiteClassifier {
     fun mapToCondition(rawLabel: String): String {
         return when {
             rawLabel.contains("Healthy", ignoreCase = true) -> "healthy"
+            rawLabel.contains("Melanonychia", ignoreCase = true) -> "pigmentation"
+            rawLabel.contains("Nail_Lichen_Planus", ignoreCase = true) -> "vertical_ridges"
             rawLabel.contains("Onychomycosis", ignoreCase = true) -> "white_spots"
             rawLabel.contains("Psoriasis", ignoreCase = true) ||
             rawLabel.contains("Pitting", ignoreCase = true) -> "vertical_ridges"
