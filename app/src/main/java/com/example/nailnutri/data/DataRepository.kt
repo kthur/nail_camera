@@ -2,9 +2,16 @@ package com.example.nailnutri.data
 
 import android.content.Context
 import android.content.SharedPreferences
+import com.example.nailnutri.data.db.DbMapper
+import com.example.nailnutri.data.db.NailDatabase
+import com.example.nailnutri.data.db.NailResultDao
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.launch
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.encodeToString
 
@@ -41,12 +48,16 @@ interface DataRepository {
 class DefaultDataRepository(context: Context) : DataRepository {
     private val prefs: SharedPreferences = context.getSharedPreferences("nail_nutri_prefs", Context.MODE_PRIVATE)
     private val json = Json { ignoreUnknownKeys = true }
+    private val dao: NailResultDao = NailDatabase.getDatabase(context).nailResultDao()
+    private val scope = CoroutineScope(Dispatchers.IO)
 
-    private val _history = MutableStateFlow<List<NailAnalysisResult>>(emptyList())
-    override val history = _history.asStateFlow()
+    override val history: Flow<List<NailAnalysisResult>> = dao.getAllHistoryFlow().map { list ->
+        list.map { DbMapper.toDomain(it) }
+    }
 
-    private val _sessions = MutableStateFlow<List<SessionReport>>(emptyList())
-    override val sessions = _sessions.asStateFlow()
+    override val sessions: Flow<List<SessionReport>> = dao.getAllSessionsFlow().map { list ->
+        list.map { DbMapper.toDomain(it) }
+    }
 
     private val _apiKey = MutableStateFlow("")
     override val apiKey = _apiKey.asStateFlow()
@@ -76,25 +87,11 @@ class DefaultDataRepository(context: Context) : DataRepository {
     override val reminderEnabled = _reminderEnabled.asStateFlow()
 
     init {
-        loadData()
+        loadSettings()
+        migrateIfNeeded()
     }
 
-    private fun loadData() {
-        val historyJson = prefs.getString("scan_history", "[]") ?: "[]"
-        try {
-            val list = json.decodeFromString<List<NailAnalysisResult>>(historyJson)
-            _history.value = list.sortedByDescending { it.date }
-        } catch (e: Exception) {
-            _history.value = emptyList()
-        }
-
-        val sessionsJson = prefs.getString("session_reports", "[]") ?: "[]"
-        try {
-            _sessions.value = json.decodeFromString<List<SessionReport>>(sessionsJson).sortedByDescending { it.createdAt }
-        } catch (e: Exception) {
-            _sessions.value = emptyList()
-        }
-
+    private fun loadSettings() {
         _apiKey.value = prefs.getString("api_key", "") ?: ""
         _isMockMode.value = prefs.getBoolean("is_mock_mode", true)
         _gemmaModelPath.value = prefs.getString("gemma_model_path", "/data/local/tmp/gemma.bin") ?: "/data/local/tmp/gemma.bin"
@@ -106,22 +103,40 @@ class DefaultDataRepository(context: Context) : DataRepository {
         _reminderEnabled.value = prefs.getBoolean("reminder_enabled", false)
     }
 
+    private fun migrateIfNeeded() {
+        if (prefs.contains("scan_history") || prefs.contains("session_reports")) {
+            scope.launch {
+                val historyJson = prefs.getString("scan_history", "[]") ?: "[]"
+                try {
+                    val list = json.decodeFromString<List<NailAnalysisResult>>(historyJson)
+                    list.forEach { dao.insertResult(DbMapper.toEntity(it)) }
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                }
+
+                val sessionsJson = prefs.getString("session_reports", "[]") ?: "[]"
+                try {
+                    val list = json.decodeFromString<List<SessionReport>>(sessionsJson)
+                    list.forEach { dao.insertSession(DbMapper.toEntity(it)) }
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                }
+
+                prefs.edit().remove("scan_history").remove("session_reports").apply()
+            }
+        }
+    }
+
     override suspend fun saveResult(result: NailAnalysisResult) {
-        val currentList = _history.value.toMutableList()
-        // Remove duplicate if exists, then add at start
-        currentList.removeAll { it.id == result.id }
-        currentList.add(0, result)
-        saveHistoryList(currentList)
+        dao.insertResult(DbMapper.toEntity(result))
     }
 
     override suspend fun deleteResult(id: String) {
-        val currentList = _history.value.toMutableList()
-        currentList.removeAll { it.id == id }
-        saveHistoryList(currentList)
+        dao.deleteResultById(id)
     }
 
     override suspend fun clearHistory() {
-        saveHistoryList(emptyList())
+        dao.clearHistory()
     }
 
     override suspend fun setApiKey(key: String) {
@@ -169,33 +184,15 @@ class DefaultDataRepository(context: Context) : DataRepository {
         _reminderEnabled.value = enabled
     }
 
-    private fun saveHistoryList(list: List<NailAnalysisResult>) {
-        val sortedList = list.sortedByDescending { it.date }
-        _history.value = sortedList
-        val historyJson = json.encodeToString(sortedList)
-        prefs.edit().putString("scan_history", historyJson).apply()
-    }
-
     override suspend fun saveSession(report: SessionReport) {
-        val list = _sessions.value.toMutableList()
-        list.removeAll { it.id == report.id }
-        list.add(0, report)
-        saveSessionList(list)
+        dao.insertSession(DbMapper.toEntity(report))
     }
 
     override suspend fun deleteSession(id: String) {
-        val list = _sessions.value.toMutableList()
-        list.removeAll { it.id == id }
-        saveSessionList(list)
+        dao.deleteSessionById(id)
     }
 
     override suspend fun clearSessions() {
-        saveSessionList(emptyList())
-    }
-
-    private fun saveSessionList(list: List<SessionReport>) {
-        val sorted = list.sortedByDescending { it.createdAt }
-        _sessions.value = sorted
-        prefs.edit().putString("session_reports", json.encodeToString(sorted)).apply()
+        dao.clearSessions()
     }
 }

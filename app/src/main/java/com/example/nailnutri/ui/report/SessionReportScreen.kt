@@ -411,20 +411,20 @@ fun SessionListScreen(
                         return@ExtendedFloatingActionButton
                     }
                     val allDeficiencies = recentResults
-                        .flatMap { it.deficientNutrients }
-                        .groupBy { it.name }
+                        .flatMap { r -> r.deficientNutrients }
+                        .groupBy { n -> n.name }
                         .entries
-                        .sortedByDescending { it.value.size }
+                        .sortedByDescending { entry -> entry.value.size }
                         .take(3)
-                        .map { it.key }
-                    val totalDeficits = recentResults.sumOf { it.deficientNutrients.size }
+                        .map { entry -> entry.key }
+                    val totalDeficits = recentResults.sumOf { r -> r.deficientNutrients.size }
                     val score = (100 - (totalDeficits * 12).coerceAtMost(80)).coerceAtLeast(10)
                     val label = SimpleDateFormat("M월 d일 세션", Locale.KOREAN).format(Date())
                     val report = SessionReport(
                         id = UUID.randomUUID().toString(),
                         createdAt = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault()).format(Date()),
                         label = label,
-                        resultIds = recentResults.map { it.id },
+                        resultIds = recentResults.map { r -> r.id },
                         topDeficiencies = allDeficiencies,
                         overallScore = score
                     )
@@ -473,8 +473,8 @@ fun SessionListScreen(
                 verticalArrangement = Arrangement.spacedBy(12.dp),
                 contentPadding = PaddingValues(vertical = 16.dp)
             ) {
-                items(sessions, key = { it.id }) { session ->
-                    SessionListItem(session, onClick = { onSessionClick(session.id) })
+                items(sessions, key = { s -> s.id }) { s ->
+                    SessionListItem(s, onClick = { onSessionClick(s.id) })
                 }
                 item { Spacer(Modifier.height(80.dp)) }
             }

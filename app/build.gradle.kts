@@ -2,10 +2,12 @@ import com.google.firebase.appdistribution.gradle.firebaseAppDistribution
 
 plugins {
   alias(libs.plugins.android.application)
+  alias(libs.plugins.kotlin.android)
   alias(libs.plugins.compose.compiler)
   alias(libs.plugins.kotlin.serialization)
   alias(libs.plugins.google.services)
   alias(libs.plugins.firebase.appdistribution)
+  alias(libs.plugins.devtools.ksp)
 }
 
 android {
@@ -164,9 +166,10 @@ configurations.all {
   // WorkManager
   implementation(libs.work.runtime.ktx)
 
-  // Room
+  // Room DB
   implementation(libs.room.runtime)
   implementation(libs.room.ktx)
+  ksp(libs.room.compiler)
 }
 
 // ---------------------------------------------------------------------------
