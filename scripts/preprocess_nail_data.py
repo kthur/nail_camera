@@ -37,13 +37,33 @@ def augment_image(img: Image.Image) -> Image.Image:
     # Random horizontal flip
     if random.random() < 0.5:
         img = img.transpose(Image.FLIP_LEFT_RIGHT)
+    
     # Random brightness
     enhancer = ImageEnhance.Brightness(img)
-    factor = random.uniform(0.8, 1.2)
-    img = enhancer.enhance(factor)
+    img = enhancer.enhance(random.uniform(0.8, 1.2))
+    
+    # Random contrast
+    enhancer = ImageEnhance.Contrast(img)
+    img = enhancer.enhance(random.uniform(0.8, 1.2))
+    
+    # Random color/saturation
+    enhancer = ImageEnhance.Color(img)
+    img = enhancer.enhance(random.uniform(0.8, 1.2))
+    
     # Random slight rotation (-15 to +15 degrees)
     angle = random.uniform(-15.0, 15.0)
     img = img.rotate(angle, resample=Image.BILINEAR, expand=False, fillcolor=(128, 128, 128))
+    
+    # Random zoom (crop center slightly and resize back)
+    if random.random() < 0.5:
+        w, h = img.size
+        zoom_factor = random.uniform(0.8, 0.95)
+        new_w, new_h = int(w * zoom_factor), int(h * zoom_factor)
+        left = (w - new_w) // 2
+        top = (h - new_h) // 2
+        img = img.crop((left, top, left + new_w, top + new_h))
+        img = img.resize(TARGET_SIZE, Image.BILINEAR)
+        
     return img
 
 def process_source(source_dir: Path, label_map: dict, output_root: Path):
@@ -119,7 +139,10 @@ def main():
     val_dir.mkdir(parents=True, exist_ok=True)
     
     print("[*] Splitting preprocessed dataset into train/validation directories...", flush=True)
-    copied_count = 0
+    # Collect files by label for stratified split
+    from collections import defaultdict
+    files_by_label = defaultdict(list)
+    
     for source in root.iterdir():
         if source.is_dir() and source.name != "all_processed_data":
             proc_img_dir = source / "processed"
@@ -132,11 +155,19 @@ def main():
                         filename, label = row
                         src_file = proc_img_dir / filename
                         if src_file.exists() and label != "UNKNOWN":
-                            target_sub = train_dir if random.random() < 0.85 else val_dir
-                            target_label_dir = target_sub / label
-                            target_label_dir.mkdir(parents=True, exist_ok=True)
-                            shutil.copy2(src_file, target_label_dir / filename)
-                            copied_count += 1
+                            files_by_label[label].append((src_file, filename))
+                            
+    copied_count = 0
+    for label, files in files_by_label.items():
+        random.shuffle(files)
+        train_count = int(len(files) * 0.85)
+        for i, (src_file, filename) in enumerate(files):
+            target_sub = train_dir if i < train_count else val_dir
+            target_label_dir = target_sub / label
+            target_label_dir.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(src_file, target_label_dir / filename)
+            copied_count += 1
+            
     print(f"[+] Compiled all_processed_data structure: Copied {copied_count} files.", flush=True)
 
 if __name__ == "__main__":

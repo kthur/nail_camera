@@ -67,87 +67,32 @@ def load_data(csv_path: Path, base_dir: Path):
     y = tf.convert_to_tensor(y, dtype=tf.int32)
     return X, y, label_list
 
-def uib_block(inputs, out_channels, expand_ratio, start_dw_size=0, middle_dw_size=0, stride=1, block_id=0):
-    from tensorflow.keras.layers import Conv2D, DepthwiseConv2D, BatchNormalization, Add, Activation
-    
-    in_channels = inputs.shape[-1]
-    x = inputs
-    
-    # 1. Start Depthwise Conv (Optional)
-    if start_dw_size > 0:
-        x = DepthwiseConv2D(kernel_size=start_dw_size, strides=stride if middle_dw_size == 0 else 1,
-                            padding="same", use_bias=False, name=f"uib_{block_id}_start_dw")(x)
-        x = BatchNormalization(name=f"uib_{block_id}_start_dw_bn")(x)
-        x = Activation("relu", name=f"uib_{block_id}_start_dw_act")(x)
-        
-    # 2. Expansion (Pointwise)
-    expanded_channels = int(in_channels * expand_ratio)
-    if expanded_channels != in_channels:
-        x = Conv2D(expanded_channels, kernel_size=1, padding="same", use_bias=False, name=f"uib_{block_id}_expand")(x)
-        x = BatchNormalization(name=f"uib_{block_id}_expand_bn")(x)
-        x = Activation("relu", name=f"uib_{block_id}_expand_act")(x)
-        
-    # 3. Middle Depthwise Conv (Optional)
-    if middle_dw_size > 0:
-        x = DepthwiseConv2D(kernel_size=middle_dw_size, strides=stride,
-                            padding="same", use_bias=False, name=f"uib_{block_id}_mid_dw")(x)
-        x = BatchNormalization(name=f"uib_{block_id}_mid_dw_bn")(x)
-        x = Activation("relu", name=f"uib_{block_id}_mid_dw_act")(x)
-        
-    # 4. Projection (Pointwise)
-    x = Conv2D(out_channels, kernel_size=1, padding="same", use_bias=False, name=f"uib_{block_id}_project")(x)
-    x = BatchNormalization(name=f"uib_{block_id}_project_bn")(x)
-    
-    # Shortcut connection
-    if stride == 1 and in_channels == out_channels:
-        x = Add(name=f"uib_{block_id}_add")([inputs, x])
-    return x
-
 def build_model(num_classes: int):
-    from tensorflow.keras.layers import Input, Conv2D, BatchNormalization, Activation, GlobalAveragePooling2D, Dense, Dropout
+    from tensorflow.keras.layers import Input, GlobalAveragePooling2D, Dense, Dropout, BatchNormalization
     from tensorflow.keras.models import Model
+    from tensorflow.keras.applications import MobileNetV2
     
     input_shape = TARGET_SIZE + (3,)
+    base_model = MobileNetV2(input_shape=input_shape, include_top=False, weights='imagenet')
+    
+    # Freeze the base model for the first stage
+    base_model.trainable = False
+    
     inputs = Input(shape=input_shape)
+    # Scale inputs from [0, 1] to [-1, 1] for MobileNetV2
+    x = (inputs * 2.0) - 1.0
     
-    # Stem layer (Conv2D 3x3)
-    x = Conv2D(32, kernel_size=3, strides=2, padding="same", use_bias=False, name="stem_conv")(inputs)
-    x = BatchNormalization(name="stem_bn")(x)
-    x = Activation("relu", name="stem_act")(x)
-    
-    # UIB blocks sequence (MobileNetV4 Small config template)
-    configs = [
-        # Stage 1
-        (1, 32, 2.0, 3, 3, 1),
-        # Stage 2
-        (2, 64, 4.0, 0, 3, 2),
-        (3, 64, 4.0, 3, 0, 1),
-        # Stage 3
-        (4, 96, 4.0, 3, 3, 2),
-        (5, 96, 4.0, 0, 3, 1),
-        # Stage 4
-        (6, 128, 6.0, 3, 5, 2),
-        (7, 128, 6.0, 3, 3, 1)
-    ]
-    
-    for cfg in configs:
-        bid, out_c, exp_r, s_dw, m_dw, s = cfg
-        x = uib_block(x, out_c, exp_r, start_dw_size=s_dw, middle_dw_size=m_dw, stride=s, block_id=bid)
-        
-    # Head layers
-    x = Conv2D(512, kernel_size=1, padding="same", use_bias=False, name="conv_head")(x)
-    x = BatchNormalization(name="conv_head_bn")(x)
-    x = Activation("relu", name="conv_head_act")(x)
-    
+    x = base_model(x, training=False)
     x = GlobalAveragePooling2D(name="avg_pool")(x)
-    x = Dropout(0.2, name="head_dropout")(x)
+    x = BatchNormalization()(x)
+    x = Dropout(0.3, name="head_dropout")(x)
     outputs = Dense(num_classes, activation="softmax", name="predictions")(x)
     
-    model = Model(inputs=inputs, outputs=outputs, name="MobileNetV4_Small")
+    model = Model(inputs=inputs, outputs=outputs, name="MobileNetV2_Transfer")
     model.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=1e-3),
-                  loss='sparse_categorical_crossentropy', metrics=['accuracy'])
+                  loss='sparse_categorical_crossentropy', metrics=['accuracy'], jit_compile=False)
     
-    return model, None
+    return model, base_model
 
 def main():
     parser = argparse.ArgumentParser(description='Train nail disease TFLite model')
@@ -162,11 +107,33 @@ def main():
     base_dir = data_csv.parent
     X, y, label_list = load_data(data_csv, base_dir)
     
-    model, _ = build_model(len(label_list))
+    model, base_model = build_model(len(label_list))
     
-    print("Training MobileNetV4 model end-to-end...")
+    # Compute class weights
+    y_np = y.numpy()
+    classes, counts = np.unique(y_np, return_counts=True)
+    total = len(y_np)
+    class_weight_dict = {int(c): float(total) / (len(classes) * count) for c, count in zip(classes, counts)}
+    print("Class weights:", class_weight_dict)
+    
+    print("Stage 1: Training head with frozen base...")
     early_stop = tf.keras.callbacks.EarlyStopping(monitor='val_loss', patience=3, restore_best_weights=True)
-    model.fit(X, y, epochs=args.epochs, batch_size=args.batch_size, validation_split=0.1, callbacks=[early_stop])
+    lr_scheduler = tf.keras.callbacks.ReduceLROnPlateau(monitor='val_loss', factor=0.5, patience=2)
+    
+    model.fit(X, y, epochs=10, batch_size=args.batch_size, validation_split=0.15, 
+              class_weight=class_weight_dict, callbacks=[early_stop, lr_scheduler])
+              
+    print("Stage 2: Fine-tuning entire model...")
+    base_model.trainable = True
+    # Freeze the first 100 layers and unfreeze the rest for fine-tuning
+    for layer in base_model.layers[:100]:
+        layer.trainable = False
+        
+    model.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=1e-4),
+                  loss='sparse_categorical_crossentropy', metrics=['accuracy'], jit_compile=False)
+                  
+    model.fit(X, y, epochs=args.epochs, batch_size=args.batch_size, validation_split=0.15,
+              class_weight=class_weight_dict, callbacks=[early_stop, lr_scheduler])
 
     # Export TFLite model with Float16 quantization
     converter = tf.lite.TFLiteConverter.from_keras_model(model)

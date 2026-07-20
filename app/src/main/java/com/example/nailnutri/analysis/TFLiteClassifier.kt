@@ -37,7 +37,7 @@ object TFLiteClassifier {
 
     fun classify(bitmap: Bitmap): List<Pair<String, Float>> {
         val interp = interpreter ?: return emptyList()
-        val inputImage = resizeBitmap(bitmap, 224, 224)
+        val inputImage = resizeBitmap(bitmap, 200, 150)
         val inputBuffer = bitmapToByteBuffer(inputImage)
         val output = Array(1) { FloatArray(labels.size.coerceAtLeast(1)) }
         interp.run(inputBuffer, output)
@@ -91,19 +91,20 @@ object TFLiteClassifier {
 
     private fun bitmapToByteBuffer(bitmap: Bitmap): ByteBuffer {
         val inputChannels = 3
-        val inputSize = 224
-        val byteBuffer = ByteBuffer.allocateDirect(4 * inputSize * inputSize * inputChannels)
+        val width = 200
+        val height = 150
+        val byteBuffer = ByteBuffer.allocateDirect(4 * width * height * inputChannels)
         byteBuffer.order(ByteOrder.nativeOrder())
         byteBuffer.rewind()
-        val pixels = IntArray(inputSize * inputSize)
-        bitmap.getPixels(pixels, 0, inputSize, 0, 0, inputSize, inputSize)
+        val pixels = IntArray(width * height)
+        bitmap.getPixels(pixels, 0, width, 0, 0, width, height)
         for (pixel in pixels) {
             val r = (pixel shr 16) and 0xFF
             val g = (pixel shr 8) and 0xFF
             val b = pixel and 0xFF
-            val rf = (r - 127.5f) / 127.5f
-            val gf = (g - 127.5f) / 127.5f
-            val bf = (b - 127.5f) / 127.5f
+            val rf = r / 255.0f
+            val gf = g / 255.0f
+            val bf = b / 255.0f
             byteBuffer.putFloat(rf)
             byteBuffer.putFloat(gf)
             byteBuffer.putFloat(bf)
