@@ -308,15 +308,19 @@ fun CameraScanScreen(
                                                             else -> 1
                                                         }
                                                         val decodeOptions = BitmapFactory.Options().apply { inSampleSize = sampleSize }
-                                                        val rawBitmap = BitmapFactory.decodeFile(file.absolutePath, decodeOptions)!!
+                                                        val rawBitmap = BitmapFactory.decodeFile(file.absolutePath, decodeOptions)
+                                                            ?: continue
                                                         val rotatedBitmap = rotateBitmapIfRequired(rawBitmap, file.absolutePath)
-                                                        val bitmap = cropNailRegion(rotatedBitmap)
-                                                        if (rotatedBitmap != rawBitmap) {
-                                                            rawBitmap.recycle()
-                                                        }
-                                                        // 공통 크기(224x224)로 다운스케일
-                                                        scaledBitmaps.add(Bitmap.createScaledBitmap(bitmap, 224, 224, true))
-                                                        if (bitmap != scaledBitmaps.last()) bitmap.recycle()
+                                                        if (rotatedBitmap != rawBitmap) rawBitmap.recycle()
+                                                        val croppedBitmap = cropNailRegion(rotatedBitmap)
+                                                        if (croppedBitmap != rotatedBitmap) rotatedBitmap.recycle()
+                                                        // TFLiteClassifier 입력 크기(200x150, 가로x세로)에 맞춰 스케일
+                                                        val scaledBitmap = Bitmap.createScaledBitmap(croppedBitmap, 200, 150, true)
+                                                        if (scaledBitmap != croppedBitmap) croppedBitmap.recycle()
+                                                        scaledBitmaps.add(scaledBitmap)
+                                                    }
+                                                    if (scaledBitmaps.isEmpty()) {
+                                                        throw Exception("이미지 디코딩에 실패했습니다. 다시 시도해 주세요.")
                                                     }
 
                                                     // 3. 3장 픽셀 평균화 → 일관된 단일 이미지
