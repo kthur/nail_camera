@@ -4,10 +4,22 @@ import android.content.Context
 
 /**
  * Returns the filename of the TFLite model asset.
- * The Gradle task `trainNailModel` generates `nail_classifier.tflite`.
+ * Reads model_version.txt to determine whether to use model_v2.tflite or nail_classifier.tflite.
  */
 object ModelVersionProvider {
-    private const val MODEL_NAME = "nail_classifier.tflite"
-
-    fun getModelPath(context: Context): String = MODEL_NAME
+    fun getModelPath(context: Context): String {
+        return try {
+            val version = context.assets.open("model_version.txt").bufferedReader().use { it.readText().trim() }
+            if (version.isNotEmpty()) {
+                val fullPath = "model_$version.tflite"
+                // Verify the asset exists
+                context.assets.openFd(fullPath).close()
+                fullPath
+            } else {
+                "nail_classifier.tflite"
+            }
+        } catch (e: Exception) {
+            "nail_classifier.tflite"
+        }
+    }
 }
