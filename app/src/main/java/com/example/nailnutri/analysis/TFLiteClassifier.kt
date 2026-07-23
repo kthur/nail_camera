@@ -30,20 +30,29 @@ object TFLiteClassifier {
                     setNumThreads(4)
                 }
                 loadedInterp = Interpreter(modelBuffer, gpuOptions)
-            } catch (e: Exception) {
+            } catch (t: Throwable) {
                 // Fallback to CPU interpreter
-                val cpuOptions = Interpreter.Options().apply {
-                    setNumThreads(4)
+                try {
+                    val cpuOptions = Interpreter.Options().apply {
+                        setNumThreads(4)
+                    }
+                    loadedInterp = Interpreter(modelBuffer, cpuOptions)
+                } catch (t2: Throwable) {
+                    t2.printStackTrace()
                 }
-                loadedInterp = Interpreter(modelBuffer, cpuOptions)
+            }
+            
+            if (loadedInterp == null) {
+                isLoaded = false
+                return false
             }
             
             interpreter = loadedInterp
             labels = loadLabels(context)
             isLoaded = true
             return true
-        } catch (e: Exception) {
-            e.printStackTrace()
+        } catch (t: Throwable) {
+            t.printStackTrace()
             isLoaded = false
             return false
         }
@@ -81,8 +90,8 @@ object TFLiteClassifier {
 
             return effectiveLabels.mapIndexed { i, label -> label to probs[i] }
                 .sortedByDescending { it.second }
-        } catch (e: Exception) {
-            e.printStackTrace()
+        } catch (t: Throwable) {
+            t.printStackTrace()
             return emptyList()
         }
     }
@@ -123,7 +132,7 @@ object TFLiteClassifier {
                 .readLines()
                 .map { it.trim() }
                 .filter { it.isNotEmpty() }
-        } catch (e: Exception) {
+        } catch (t: Throwable) {
             listOf("NORMAL", "ONYCHOMYCOSIS", "PALLOR", "DISCOLORATION", "UNKNOWN")
         }
     }
@@ -143,9 +152,10 @@ object TFLiteClassifier {
             val r = (pixel shr 16) and 0xFF
             val g = (pixel shr 8) and 0xFF
             val b = pixel and 0xFF
-            val rf = r / 255.0f
-            val gf = g / 255.0f
-            val bf = b / 255.0f
+            // Normalize to [-1.0, 1.0] to match model training preprocessing
+            val rf = (r - 127.5f) / 127.5f
+            val gf = (g - 127.5f) / 127.5f
+            val bf = (b - 127.5f) / 127.5f
             byteBuffer.putFloat(rf)
             byteBuffer.putFloat(gf)
             byteBuffer.putFloat(bf)

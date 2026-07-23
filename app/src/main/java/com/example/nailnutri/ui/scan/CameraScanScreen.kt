@@ -354,8 +354,9 @@ fun CameraScanScreen(
                                                         viewModel.saveResult(result)
                                                         onAnalysisComplete(result.id)
                                                     }
-                                                } catch (e: Exception) {
-                                                    errorMessage = e.message ?: "촬영 및 분석 중 오류 발생"
+                                                } catch (t: Throwable) {
+                                                    t.printStackTrace()
+                                                    errorMessage = t.message ?: "촬영 및 분석 중 오류 발생"
                                                     analyzing = false
                                                 }
                                             }

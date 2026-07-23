@@ -281,11 +281,13 @@ object NailClassifier {
                         val condition = TFLiteClassifier.mapToCondition(finalLabel)
                         val dateStr = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault()).format(Date())
                         val mockId = UUID.randomUUID().toString()
-                        val symptomRegions = localizeSymptoms(finalLabel, bitmap)
+                        val symptomRegions = localizeSymptoms(condition, bitmap).ifEmpty { localizeSymptoms(finalLabel, bitmap) }
                         return buildSingleConditionResult(condition, imagePath, dateStr, mockId, symptomRegions)
                     }
                 }
-            } catch (_: Exception) { }
+            } catch (t: Throwable) {
+                t.printStackTrace()
+            }
         }
         val features = NailFeatureExtractor.extract(bitmap)
         return buildResultFromFeatures(features, imagePath, bitmap)
