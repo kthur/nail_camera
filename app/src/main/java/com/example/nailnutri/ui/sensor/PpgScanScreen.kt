@@ -37,6 +37,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
 import com.example.nailnutri.analysis.PPGAnalyzer
 import com.example.nailnutri.data.DataRepository
@@ -61,6 +63,18 @@ fun PpgScanScreen(
         mutableStateOf(
             ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
         )
+    }
+
+    val permissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        hasCameraPermission = isGranted
+    }
+
+    LaunchedEffect(Unit) {
+        if (!hasCameraPermission) {
+            permissionLauncher.launch(Manifest.permission.CAMERA)
+        }
     }
 
     var isMeasuring by remember { mutableStateOf(false) }
@@ -123,15 +137,24 @@ fun PpgScanScreen(
                     Spacer(modifier = Modifier.height(30.dp))
                     Button(
                         onClick = {
+                            permissionLauncher.launch(Manifest.permission.CAMERA)
+                        },
+                        shape = RoundedCornerShape(12.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF34D399))
+                    ) {
+                        Text("카메라 권한 허용하기", color = Color.White, fontWeight = FontWeight.Bold)
+                    }
+                    Spacer(modifier = Modifier.height(12.dp))
+                    OutlinedButton(
+                        onClick = {
                             val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
                                 data = Uri.fromParts("package", context.packageName, null)
                             }
                             context.startActivity(intent)
                         },
-                        shape = RoundedCornerShape(12.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF34D399))
+                        shape = RoundedCornerShape(12.dp)
                     ) {
-                        Text("설정 앱으로 이동하여 권한 허용하기", color = Color.White, fontWeight = FontWeight.Bold)
+                        Text("설정 앱으로 이동하여 직접 권한 허용", color = Color.White)
                     }
                 }
             } else {

@@ -17,6 +17,8 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -37,6 +39,14 @@ fun SettingsScreen(
     modifier: Modifier = Modifier
 ) {
     val context = androidx.compose.ui.platform.LocalContext.current
+
+    val notificationPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        if (isGranted) {
+            com.example.nailnutri.worker.NailCheckReminderWorker.schedule(context)
+        }
+    }
     val apiKey by viewModel.apiKey.collectAsStateWithLifecycle(initialValue = "")
     val isMockMode by viewModel.isMockMode.collectAsStateWithLifecycle(initialValue = true)
     val useGemma by viewModel.useGemma.collectAsStateWithLifecycle(initialValue = false)
@@ -662,7 +672,15 @@ fun SettingsScreen(
                                 coroutineScope.launch {
                                     viewModel.setReminderEnabled(enabled)
                                     if (enabled) {
-                                        com.example.nailnutri.worker.NailCheckReminderWorker.schedule(context)
+                                        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU &&
+                                            androidx.core.content.ContextCompat.checkSelfPermission(
+                                                context, android.Manifest.permission.POST_NOTIFICATIONS
+                                            ) != android.content.pm.PackageManager.PERMISSION_GRANTED
+                                        ) {
+                                            notificationPermissionLauncher.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+                                        } else {
+                                            com.example.nailnutri.worker.NailCheckReminderWorker.schedule(context)
+                                        }
                                         snackbarHostState.showSnackbar("3일마다 알림이 전송됩니다.")
                                     } else {
                                         com.example.nailnutri.worker.NailCheckReminderWorker.cancel(context)
