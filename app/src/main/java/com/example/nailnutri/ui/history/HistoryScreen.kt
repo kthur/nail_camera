@@ -11,6 +11,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.Assessment
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material3.*
@@ -24,38 +25,40 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.example.nailnutri.viewmodel.MainViewModel
 import com.example.nailnutri.data.NailAnalysisResult
+import com.example.nailnutri.data.SessionReport
 import com.example.nailnutri.theme.NutriAmber
 import com.example.nailnutri.theme.NutriCoral
 import com.example.nailnutri.theme.NutriGreen
-import kotlinx.coroutines.launch
+import com.example.nailnutri.viewmodel.MainViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HistoryScreen(
     viewModel: MainViewModel,
     onResultClick: (String) -> Unit,
+    onSessionClick: (String) -> Unit = {},
     onBackClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val historyList by viewModel.history.collectAsStateWithLifecycle()
+    val sessions by viewModel.sessions.collectAsStateWithLifecycle(initialValue = emptyList())
     val sortedHistoryList = remember(historyList) { historyList.sortedByDescending { it.date } }
-    val coroutineScope = rememberCoroutineScope()
     
+    var selectedTab by remember { mutableStateOf(0) }
     var showClearDialog by remember { mutableStateOf(false) }
 
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("분석 기록") },
+                title = { Text("기록 & 리포트 센터", fontWeight = FontWeight.Bold) },
                 navigationIcon = {
                     IconButton(onClick = onBackClick) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "뒤로")
                     }
                 },
                 actions = {
-                    if (sortedHistoryList.isNotEmpty()) {
+                    if (selectedTab == 0 && sortedHistoryList.isNotEmpty()) {
                         IconButton(onClick = { showClearDialog = true }) {
                             Icon(
                                 imageVector = Icons.Default.Delete,
@@ -72,46 +75,112 @@ fun HistoryScreen(
         },
         modifier = modifier
     ) { paddingValues ->
-        Box(
+        Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues)
         ) {
-            LazyColumn(
-                modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(16.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
+            // Tab Row
+            TabRow(
+                selectedTabIndex = selectedTab,
+                containerColor = MaterialTheme.colorScheme.surface,
+                contentColor = MaterialTheme.colorScheme.primary
             ) {
-                item {
-                    TrendChartCard(historyList = sortedHistoryList)
-                }
-                
-                if (sortedHistoryList.isEmpty()) {
+                Tab(
+                    selected = selectedTab == 0,
+                    onClick = { selectedTab = 0 },
+                    text = { Text("스캔 히스토리", fontWeight = FontWeight.Bold) },
+                    icon = { Icon(Icons.Default.History, contentDescription = null) }
+                )
+                Tab(
+                    selected = selectedTab == 1,
+                    onClick = { selectedTab = 1 },
+                    text = { Text("종합 세션 리포트", fontWeight = FontWeight.Bold) },
+                    icon = { Icon(Icons.Default.Assessment, contentDescription = null) }
+                )
+            }
+
+            if (selectedTab == 0) {
+                // Tab 0: Scan History List & Trend Chart
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
                     item {
-                        Column(
-                            modifier = Modifier
-                                .fillParentMaxHeight(0.7f)
-                                .fillMaxWidth()
-                                .padding(32.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.Center
-                        ) {
+                        TrendChartCard(historyList = sortedHistoryList)
+                    }
+                    
+                    if (sortedHistoryList.isEmpty()) {
+                        item {
+                            Column(
+                                modifier = Modifier
+                                    .fillParentMaxHeight(0.6f)
+                                    .fillMaxWidth()
+                                    .padding(32.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.History,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.2f),
+                                    modifier = Modifier.size(72.dp)
+                                )
+                                Spacer(modifier = Modifier.height(16.dp))
+                                Text(
+                                    text = "저장된 스캔 기록이 없습니다.",
+                                    fontWeight = FontWeight.Bold,
+                                    style = MaterialTheme.typography.titleMedium,
+                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                                )
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Text(
+                                    text = "첫 손톱 또는 센서 분석을 완료하면 이곳에 자동으로 기록됩니다.",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f),
+                                    textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                                )
+                            }
+                        }
+                    } else {
+                        items(sortedHistoryList, key = { it.id }) { result ->
+                            HistoryItemCard(
+                                result = result,
+                                onClick = { onResultClick(result.id) },
+                                onDelete = {
+                                    viewModel.deleteResult(result.id)
+                                }
+                            )
+                        }
+                    }
+                }
+            } else {
+                // Tab 1: Comprehensive Session Reports
+                if (sessions.isEmpty()) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(32.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             Icon(
-                                imageVector = Icons.Default.History,
+                                imageVector = Icons.Default.Assessment,
                                 contentDescription = null,
                                 tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.2f),
                                 modifier = Modifier.size(72.dp)
                             )
-                            Spacer(modifier = Modifier.height(16.dp))
+                            Spacer(Modifier.height(16.dp))
                             Text(
-                                text = "저장된 기록이 없습니다.",
-                                fontWeight = FontWeight.Bold,
+                                "저장된 종합 세션이 없습니다.",
                                 style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
                             )
-                            Spacer(modifier = Modifier.height(8.dp))
+                            Spacer(Modifier.height(8.dp))
                             Text(
-                                text = "첫 손톱 분석을 완료하면 이곳에 자동으로 저장됩니다.",
+                                "센서 진단 스위트에서 여러 스캔을 묶어\n종합 리포트를 생성할 수 있습니다.",
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f),
                                 textAlign = androidx.compose.ui.text.style.TextAlign.Center
@@ -119,14 +188,60 @@ fun HistoryScreen(
                         }
                     }
                 } else {
-                    items(sortedHistoryList, key = { it.id }) { result ->
-                        HistoryItemCard(
-                            result = result,
-                            onClick = { onResultClick(result.id) },
-                            onDelete = {
-                                viewModel.deleteResult(result.id)
+                    LazyColumn(
+                        modifier = Modifier.fillMaxSize(),
+                        contentPadding = PaddingValues(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        items(sessions, key = { s -> s.id }) { s ->
+                            Card(
+                                onClick = { onSessionClick(s.id) },
+                                shape = RoundedCornerShape(16.dp),
+                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                                elevation = CardDefaults.cardElevation(defaultElevation = 1.5.dp),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Row(
+                                    modifier = Modifier
+                                        .padding(16.dp)
+                                        .fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(16.dp)
+                                ) {
+                                    Surface(
+                                        modifier = Modifier.size(48.dp),
+                                        shape = CircleShape,
+                                        color = MaterialTheme.colorScheme.primaryContainer
+                                    ) {
+                                        Box(contentAlignment = Alignment.Center) {
+                                            Text(
+                                                "${s.overallScore}",
+                                                style = MaterialTheme.typography.titleMedium,
+                                                fontWeight = FontWeight.Bold,
+                                                color = MaterialTheme.colorScheme.onPrimaryContainer
+                                            )
+                                        }
+                                    }
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(s.label, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyLarge)
+                                        Text(s.createdAt, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f))
+                                        if (s.topDeficiencies.isNotEmpty()) {
+                                            Spacer(Modifier.height(4.dp))
+                                            Text(
+                                                "주요 결핍: " + s.topDeficiencies.joinToString(", "),
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = NutriCoral
+                                            )
+                                        }
+                                    }
+                                    Icon(
+                                        imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f)
+                                    )
+                                }
                             }
-                        )
+                        }
                     }
                 }
             }
@@ -464,4 +579,3 @@ fun HistoryItemCard(
         }
     }
 }
-

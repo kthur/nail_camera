@@ -102,6 +102,86 @@ fun HomeScreen(
         ) {
             Spacer(modifier = Modifier.height(6.dp))
 
+            // Daily 3-Sec Wellness Check-in Card (New Usability Feature)
+            var checkInStatus by remember { mutableStateOf<String?>(null) }
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(20.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "⚡ 3초 데일리 컨디션 체크인",
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        if (checkInStatus != null) {
+                            Text(
+                                text = "체크인 완료 ✓",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = NutriGreen,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = "오늘 내 손톱과 몸 상태는 어떠신가요?",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                    )
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        val options = listOf(
+                            "😊 건강함" to "건강한 상태입니다! 수분과 정기적인 영양 섭취를 유지하세요.",
+                            "💤 피로함" to "피로 누적! 비타민 B군과 마그네슘 보충을 추천합니다.",
+                            "💅 세로줄/갈라짐" to "손톱 세로줄 징후! 아연과 비오틴 섭취에 신경 써보세요."
+                        )
+                        options.forEach { (label, tip) ->
+                            FilterChip(
+                                selected = checkInStatus == label,
+                                onClick = { checkInStatus = if (checkInStatus == label) null else label },
+                                label = { Text(label, fontSize = 11.sp) },
+                                colors = FilterChipDefaults.filterChipColors(
+                                    selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                                    selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer
+                                )
+                            )
+                        }
+                    }
+                    if (checkInStatus != null) {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        val activeTip = when(checkInStatus) {
+                            "😊 건강함" -> "건강한 상태입니다! 수분과 정기적인 영양 섭취를 유지하세요."
+                            "💤 피로함" -> "피로 누적! 비타민 B군과 마그네슘 보충을 추천합니다."
+                            else -> "손톱 세로줄 징후! 아연과 비오틴 섭취에 신경 써보세요."
+                        }
+                        Surface(
+                            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.08f),
+                            shape = RoundedCornerShape(8.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(
+                                text = "💡 맞춤 가이드: $activeTip",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.padding(10.dp)
+                            )
+                        }
+                    }
+                }
+            }
+
             // Main Scanning Hero Card 1 (Nail Vision Camera Scanner)
             Box(
                 modifier = Modifier

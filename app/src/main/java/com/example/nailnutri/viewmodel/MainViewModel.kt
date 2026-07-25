@@ -17,6 +17,9 @@ class MainViewModel(
     val history: StateFlow<List<NailAnalysisResult>> = repository.history
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
+    val sessions = repository.sessions
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
     val isMockMode = repository.isMockMode
     val apiKey = repository.apiKey
     val useOnDeviceVision = repository.useOnDeviceVision
