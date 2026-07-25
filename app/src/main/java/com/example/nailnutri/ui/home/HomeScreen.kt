@@ -12,6 +12,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -21,15 +22,14 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.nailnutri.CameraScan
 import com.example.nailnutri.History
 import com.example.nailnutri.Settings
+import com.example.nailnutri.VoiceScan
 import com.example.nailnutri.viewmodel.MainViewModel
-import com.example.nailnutri.data.NailAnalysisResult
 import com.example.nailnutri.theme.*
 import androidx.navigation3.runtime.NavKey
 
@@ -69,7 +69,7 @@ fun HomeScreen(
                             style = MaterialTheme.typography.titleLarge
                         )
                         Text(
-                            text = "손톱 영양 상태 분석",
+                            text = "손톱 & 음성 영양 자가 진단",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f)
                         )
@@ -97,16 +97,16 @@ fun HomeScreen(
                 .padding(paddingValues)
                 .padding(horizontal = 20.dp)
                 .verticalScroll(scrollState),
-            verticalArrangement = Arrangement.spacedBy(24.dp),
+            verticalArrangement = Arrangement.spacedBy(20.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Spacer(modifier = Modifier.height(10.dp))
+            Spacer(modifier = Modifier.height(6.dp))
 
-            // Main Scanning Hero Card (Pulsing Gradient)
+            // Main Scanning Hero Card 1 (Nail Vision Camera Scanner)
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(220.dp)
+                    .height(180.dp)
                     .clip(RoundedCornerShape(24.dp))
                     .background(
                         Brush.linearGradient(
@@ -117,17 +117,17 @@ fun HomeScreen(
                         )
                     )
                     .clickable { onNavigate(CameraScan) }
-                    .padding(24.dp),
+                    .padding(20.dp),
                 contentAlignment = Alignment.Center
             ) {
-                Column(
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                Row(
+                    modifier = Modifier.fillMaxSize(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
-                    // Pulsing Camera icon
                     Surface(
                         modifier = Modifier
-                            .size(76.dp * pulseScale)
+                            .size(72.dp * pulseScale)
                             .clip(CircleShape),
                         color = Color.White.copy(alpha = 0.25f)
                     ) {
@@ -136,12 +136,25 @@ fun HomeScreen(
                                 imageVector = Icons.Default.CameraAlt,
                                 contentDescription = "Scan",
                                 tint = Color.White,
-                                modifier = Modifier.size(36.dp)
+                                modifier = Modifier.size(32.dp)
                             )
                         }
                     }
 
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Surface(
+                            color = Color.White.copy(alpha = 0.2f),
+                            shape = RoundedCornerShape(6.dp)
+                        ) {
+                            Text(
+                                text = "VISION AI SCANNER",
+                                color = Color.White,
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(4.dp))
                         Text(
                             text = "손톱 스캔 시작하기",
                             color = Color.White,
@@ -149,10 +162,79 @@ fun HomeScreen(
                             fontWeight = FontWeight.Bold
                         )
                         Text(
-                            text = if (isMockMode) "에뮬레이터 데모 모드 동작 중" else "실제 카메라 분석 동작 중",
-                            color = Color.White.copy(alpha = 0.8f),
+                            text = "손톱 변색, 흰 반점, 세로줄 및 스푼 모양 정밀 픽셀 분석",
+                            color = Color.White.copy(alpha = 0.85f),
                             style = MaterialTheme.typography.bodySmall,
                             modifier = Modifier.padding(top = 4.dp)
+                        )
+                    }
+                }
+            }
+
+            // Main Scanning Hero Card 2 (AI Voice Nutrition Scanner - Newly Promoted to Front)
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(140.dp)
+                    .clip(RoundedCornerShape(24.dp))
+                    .background(
+                        Brush.linearGradient(
+                            colors = listOf(
+                                Color(0xFFD97706),
+                                Color(0xFFFBBF24)
+                            )
+                        )
+                    )
+                    .clickable { onNavigate(VoiceScan) }
+                    .padding(20.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxSize(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    Surface(
+                        modifier = Modifier
+                            .size(60.dp)
+                            .clip(CircleShape),
+                        color = Color.White.copy(alpha = 0.25f)
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(
+                                imageVector = Icons.Default.Mic,
+                                contentDescription = "Voice",
+                                tint = Color.White,
+                                modifier = Modifier.size(28.dp)
+                            )
+                        }
+                    }
+
+                    Column(modifier = Modifier.weight(1f)) {
+                        Surface(
+                            color = Color.Black.copy(alpha = 0.2f),
+                            shape = RoundedCornerShape(6.dp)
+                        ) {
+                            Text(
+                                text = "STT & SYMPTOM AI",
+                                color = Color.White,
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = "음성 증상 영양 진단",
+                            color = Color.White,
+                            fontSize = 18.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            text = "피로/눈밑떨림/구강헐음 등 말로 설명하는 AI 영양소 추정",
+                            color = Color.White.copy(alpha = 0.9f),
+                            fontSize = 11.sp,
+                            modifier = Modifier.padding(top = 2.dp)
                         )
                     }
                 }
@@ -162,7 +244,7 @@ fun HomeScreen(
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(115.dp)
+                    .height(100.dp)
                     .clip(RoundedCornerShape(20.dp))
                     .background(
                         Brush.linearGradient(
@@ -182,7 +264,7 @@ fun HomeScreen(
                 ) {
                     Surface(
                         modifier = Modifier
-                            .size(48.dp)
+                            .size(44.dp)
                             .clip(CircleShape),
                         color = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
                     ) {
@@ -191,7 +273,7 @@ fun HomeScreen(
                                 imageVector = Icons.Default.Info,
                                 contentDescription = "Sensor",
                                 tint = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.size(24.dp)
+                                modifier = Modifier.size(22.dp)
                             )
                         }
                     }
@@ -202,14 +284,13 @@ fun HomeScreen(
                         Text(
                             text = "지능형 센서 자가 진단 스위트",
                             color = Color.White,
-                            fontSize = 15.sp,
+                            fontSize = 14.sp,
                             fontWeight = FontWeight.Bold
                         )
                         Text(
-                            text = "카메라 결막 혈색, 플래시 PPG 맥파, LFA 키트 분석, 마이크 수면 호흡 및 3초 발성 정밀 분석",
+                            text = "결막 혈색, PPG 맥파, LFA 키트 및 수면 호흡 정밀 분석",
                             color = Color.White.copy(alpha = 0.6f),
                             fontSize = 11.sp,
-                            lineHeight = 15.sp,
                             modifier = Modifier.padding(top = 2.dp)
                         )
                     }
@@ -303,7 +384,7 @@ fun HomeScreen(
                             modifier = Modifier.fillMaxWidth()
                         ) {
                             Text(
-                                text = if (latest.symptoms.isNotEmpty()) latest.symptoms.joinToString() else "건강한 손톱",
+                                text = if (latest.symptoms.isNotEmpty()) latest.symptoms.joinToString() else "건강한 상태",
                                 style = MaterialTheme.typography.bodyMedium,
                                 fontWeight = FontWeight.SemiBold
                             )
@@ -323,7 +404,7 @@ fun HomeScreen(
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 Text(
-                    text = "손톱 영양 정보 가이드",
+                    text = "손톱 & 음성 영양 정보 가이드",
                     fontWeight = FontWeight.Bold,
                     style = MaterialTheme.typography.titleMedium,
                     modifier = Modifier.align(Alignment.Start)
@@ -331,26 +412,18 @@ fun HomeScreen(
 
                 // Tip 1
                 NailGuideItem(
-                    title = "흰색 반점/가로선",
-                    desc = "손톱에 흰 반점이나 깊은 가로 홈이 나타나면 아연(Zinc)이나 칼슘 결핍을 의심해볼 수 있습니다. 굴, 붉은 고기, 가금류 등을 섭취해보세요.",
+                    title = "음성 말하기 진단 팁",
+                    desc = "눈밑 떨림, 입안 헐음, 만성 피로 등 평소 느끼는 신체 증상을 자유롭게 말씀하세요. AI가 증상을 파싱하여 결핍 영양소를 찾아냅니다.",
                     badgeColor = NutriAmber,
-                    badgeText = "아연/칼슘"
+                    badgeText = "음성 AI"
                 )
 
                 // Tip 2
                 NailGuideItem(
-                    title = "세로줄 현상",
-                    desc = "나이가 들면서 발생하는 자연스러운 현상일 수 있지만, 비타민 B12, 마그네슘, 철분 부족으로 발생하기도 합니다. 곡물류나 계란을 드시는 것이 좋습니다.",
+                    title = "손톱 세로줄 & 변색",
+                    desc = "손톱의 세로줄이나 변색은 비타민 B12, 마그네슘, 철분 부족의 정밀 신호일 수 있습니다. 손톱 스케너와 함께 듀얼 측정해 보세요.",
                     badgeColor = NutriTeal,
                     badgeText = "비타민B/철"
-                )
-
-                // Tip 3
-                NailGuideItem(
-                    title = "숟가락 형태 (Koilonychia)",
-                    desc = "손톱 중앙이 움푹 파이고 양끝이 위로 뒤집히는 모양은 심각한 철분 결핍성 빈혈(Iron)의 징후일 수 있어 철분이 다량 함유된 식단을 보충해야 합니다.",
-                    badgeColor = NutriCoral,
-                    badgeText = "철분"
                 )
             }
 
