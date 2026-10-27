@@ -83,6 +83,64 @@ object SymptomNutrientEngine {
             )
         }
 
+        // 6. 손톱 가로줄 / 가로 홈 / 보우선 (Beau's Lines)
+        if (lowerText.contains("가로줄") || lowerText.contains("가로 홈") || lowerText.contains("가로홈") ||
+            lowerText.contains("보우선") || lowerText.contains("보우") || lowerText.contains("수평선") || lowerText.contains("수평 홈")) {
+            detectedSymptoms.add("손톱 가로 패임 및 일시적 성장 정지 (Beau's Lines)")
+            deficientNutrients.add(
+                NutrientDetail(
+                    name = "아연 & 단백질",
+                    severity = "Severe",
+                    symptomExplanation = "고열, 급성 질환, 중증 대사 스트레스 후 나타나는 손톱 가로 홈(보우선)은 세포 분열 아연 및 케라틴 합성 단백질의 급격한 소모/결핍을 시사합니다.",
+                    recommendedFoods = listOf("굴", "소고기", "호박씨", "닭가슴살", "달걀")
+                )
+            )
+        }
+
+        // 7. 반월 결손 / 손톱 반달 이상 (Lunula Abnormality)
+        if (lowerText.contains("반월") || lowerText.contains("반달") || lowerText.contains("손톱 반달") ||
+            lowerText.contains("반달이 없") || lowerText.contains("반월 소실") || lowerText.contains("반월 이상")) {
+            detectedSymptoms.add("손톱 기저부 반월 소실 및 미세순환 저하")
+            deficientNutrients.add(
+                NutrientDetail(
+                    name = "철분 & 비타민 B12",
+                    severity = "Severe",
+                    symptomExplanation = "손톱 하단 반월(반달)의 소실이나 변색은 만성 빈혈, 헤모글로빈 부족 및 말초 모세혈관 순환 저하와 밀접한 연관이 있습니다.",
+                    recommendedFoods = listOf("붉은 고기", "시금치", "조개류", "달걀노른자", "연어")
+                )
+            )
+        }
+
+        // 8. 조갑진균증 / 손톱 무좀 / 변색 (Onychomycosis)
+        if (lowerText.contains("무좀") || lowerText.contains("진균") || lowerText.contains("곰팡이") ||
+            lowerText.contains("손톱이 두꺼") || lowerText.contains("노랗게") || lowerText.contains("황갈색") ||
+            lowerText.contains("조갑진균") || lowerText.contains("조갑진균증") || lowerText.contains("변색")) {
+            detectedSymptoms.add("손발톱 진균 감염 및 각질 비후 (Onychomycosis)")
+            deficientNutrients.add(
+                NutrientDetail(
+                    name = "아연 & 비타민 A/D",
+                    severity = "Severe",
+                    symptomExplanation = "진균 증식 및 각질층 파괴는 체내 T세포 면역 활성을 담당하는 아연과 피부 점막 방어 비타민(A, D) 부족에 따른 면역 저하 상태와 연관될 수 있습니다.",
+                    recommendedFoods = listOf("굴", "소고기", "당근", "버섯류", "호박씨")
+                )
+            )
+        }
+
+        // 9. 흑색선조 / 검은 세로줄 (Melanonychia)
+        if (lowerText.contains("흑색") || lowerText.contains("검은 줄") || lowerText.contains("검은줄") ||
+            lowerText.contains("검은 선") || lowerText.contains("검은선") || lowerText.contains("멜라닌") ||
+            lowerText.contains("흑색선조") || lowerText.contains("검은 세로줄") || lowerText.contains("검은세로줄")) {
+            detectedSymptoms.add("손톱 세로 흑색선조 및 멜라닌 색소 과다 침착 (Melanonychia)")
+            deficientNutrients.add(
+                NutrientDetail(
+                    name = "비타민 B12 & 항산화 영양소",
+                    severity = "Severe",
+                    symptomExplanation = "세로 방향의 흑갈색 선조는 멜라닌 세포의 과민 반응 및 비타민 B12 결핍으로 인한 색소 조절 이상과 관련될 수 있습니다.",
+                    recommendedFoods = listOf("소간", "연어", "참치", "달걀", "브라질너트")
+                )
+            )
+        }
+
         // 기본 Fallback 또는 양호한 상태 처리
         if (detectedSymptoms.isEmpty()) {
             detectedSymptoms.add("음성 기반 증상 진술 (특이 정황 미감지)")

@@ -48,4 +48,32 @@ public class Bitmap {
     public static Bitmap createBitmap(int width, int height, Config config) {
         return new Bitmap(width, height);
     }
+
+    public static Bitmap createBitmap(Bitmap source, int x, int y, int width, int height) {
+        Bitmap cropped = new Bitmap(width, height);
+        for (int j = 0; j < height; j++) {
+            for (int i = 0; i < width; i++) {
+                cropped.setPixel(i, j, source.getPixel(x + i, y + j));
+            }
+        }
+        return cropped;
+    }
+
+    public static Bitmap createScaledBitmap(Bitmap src, int dstWidth, int dstHeight, boolean filter) {
+        Bitmap scaled = new Bitmap(dstWidth, dstHeight);
+        float xRatio = ((float) src.getWidth()) / dstWidth;
+        float yRatio = ((float) src.getHeight()) / dstHeight;
+        for (int y = 0; y < dstHeight; y++) {
+            int srcY = Math.min((int)(y * yRatio), src.getHeight() - 1);
+            for (int x = 0; x < dstWidth; x++) {
+                int srcX = Math.min((int)(x * xRatio), src.getWidth() - 1);
+                scaled.setPixel(x, y, src.getPixel(srcX, srcY));
+            }
+        }
+        return scaled;
+    }
+
+    public void recycle() {
+        // No-op for JVM test environment
+    }
 }

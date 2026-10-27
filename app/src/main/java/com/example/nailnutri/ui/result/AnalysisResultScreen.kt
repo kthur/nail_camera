@@ -325,6 +325,8 @@ fun ResultHeader(result: NailAnalysisResult) {
                                 "spoon_nails_region_1" -> "중앙 요함 및 숟가락형 변형 영역"
                                 "spoon_nails_region_2" -> "손톱 판 가장자리 들뜸 의심 지점"
                                 "brittle_region" -> "손톱 끝 갈라짐 및 깨짐 취약 부위"
+                                "beaus_lines_region" -> "보우선 (가로 홈)"
+                                "lunula_abnormality_region" -> "반월 이상/소실"
                                 "onychomycosis_region_1" -> "진균 감염성 변색 및 박리 의심 영역"
                                 "onychomycosis_region_2" -> "가장자리 황태/비후 의심 지점"
                                 "melanonychia_region" -> "멜라닌 색소 과다 침착 세로 띠"
