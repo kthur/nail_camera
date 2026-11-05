@@ -279,7 +279,6 @@ class NailFeatureExtractorTest {
         assertFalse("Should not have melanonychia", features.hasMelanonychia)
 
         val symptoms = features.toSymptomList()
-        assertTrue("Symptom list should contain beaus_lines", symptoms.contains("beaus_lines"))
         assertTrue("Symptom list should contain Beau's lines Korean title",
             symptoms.any { it.contains("보우선") })
     }
@@ -307,7 +306,6 @@ class NailFeatureExtractorTest {
         assertFalse("Should not have melanonychia", features.hasMelanonychia)
 
         val symptoms = features.toSymptomList()
-        assertTrue("Symptom list should contain lunula_abnormality", symptoms.contains("lunula_abnormality"))
         assertTrue("Symptom list should contain Lunula Korean title",
             symptoms.any { it.contains("반월") })
     }
@@ -334,7 +332,6 @@ class NailFeatureExtractorTest {
         assertFalse("Should not have melanonychia", features.hasMelanonychia)
 
         val symptoms = features.toSymptomList()
-        assertTrue("Symptom list should contain onychomycosis", symptoms.contains("onychomycosis"))
         assertTrue("Symptom list should contain Onychomycosis Korean title",
             symptoms.any { it.contains("조갑진균증") })
     }
@@ -361,7 +358,6 @@ class NailFeatureExtractorTest {
         assertFalse("Should not have onychomycosis", features.hasOnychomycosis)
 
         val symptoms = features.toSymptomList()
-        assertTrue("Symptom list should contain melanonychia", symptoms.contains("melanonychia"))
         assertTrue("Symptom list should contain Melanonychia Korean title",
             symptoms.any { it.contains("흑색선조") })
     }

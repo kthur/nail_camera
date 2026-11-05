@@ -56,25 +56,36 @@ internal data class NailFeatures(
             list.add("낮은 혈색 / 저산소 징후 (Low Redness)")
         }
         if (hasBeausLines) {
-            list.add("beaus_lines")
             list.add("보우선 / 수평 홈 징후 (Beau's Lines)")
         }
         if (hasLunulaAbnormality) {
-            list.add("lunula_abnormality")
             list.add("반월 결손 / 이상 변색 (Lunula Abnormality)")
         }
         if (hasOnychomycosis) {
-            list.add("onychomycosis")
             list.add("조갑진균증 / 변색 및 박리 (Onychomycosis)")
         }
         if (hasMelanonychia) {
-            list.add("melanonychia")
             list.add("흑색선조 / 세로 흑색 밴드 (Melanonychia)")
         }
         if (list.isEmpty()) {
             list.add("특이사항 없음 (건강함)")
         }
         return list
+    }
+
+    // Returns the primary machine-readable condition key for classifier routing
+    fun toPrimaryConditionKey(): String? {
+        return when {
+            hasMelanonychia -> "melanonychia"
+            hasOnychomycosis -> "onychomycosis"
+            hasBeausLines -> "beaus_lines"
+            hasLunulaAbnormality -> "lunula_abnormality"
+            isDarkEdges -> "spoon_nails"
+            isPale || isLowRedness -> "spoon_nails"
+            hasWhiteSpots -> "white_spots"
+            isUnevenTexture -> "vertical_ridges"
+            else -> null // healthy
+        }
     }
 
     fun toKoreanDescription(): String {

@@ -17,6 +17,8 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_OUTPUT = PROJECT_ROOT / "app" / "src" / "main" / "assets" / "nail_classifier.tflite"
 DEFAULT_DATASET = "nikhilgurav21/nail-disease-detection-dataset"
 CACHE_DIR = PROJECT_ROOT / ".cache" / "nail_dataset"
+# Kaggle hub actual cache location (d:/k as set via KAGGLEHUB_CACHE env var)
+KAGGLE_DATA_DIR = Path("d:/k/datasets/nikhilgurav21/nail-disease-detection-dataset/versions/1")
 
 
 def check_dependencies():
@@ -249,66 +251,77 @@ def train_model(model, base_model, train_ds, val_ds, arch: str):
         print(f"[{arch}] Best Validation Accuracy: {best_acc:.4f}")
         return model, best_acc
         
-    # Phase 1: Feature Extraction
-    print(f"\n[{arch}] Phase 1: Training top layers (5 epochs)...")
+    # Phase 1: Feature Extraction — train only the classification head
+    print(f"\n[{arch}] Phase 1: Training top layers (10 epochs)...")
     base_model.trainable = False
     model.compile(
         optimizer=tf.keras.optimizers.Adam(learning_rate=1e-3),
         loss="categorical_crossentropy",
         metrics=["accuracy"],
     )
-    
+
+    early_stop_p1 = tf.keras.callbacks.EarlyStopping(
+        monitor='val_accuracy',
+        patience=4,
+        restore_best_weights=True,
+        verbose=1
+    )
+
     start_time = time.time()
     history_p1 = model.fit(
         train_ds,
         validation_data=val_ds,
-        epochs=5,
+        epochs=10,
+        callbacks=[early_stop_p1],
         verbose=1,
     )
     p1_time = time.time() - start_time
-    
-    # Phase 2: Fine-Tuning
-    print(f"\n[{arch}] Phase 2: Fine-tuning base model (5 epochs)...")
+
+    # Phase 2: Fine-Tuning — unfreeze top layers of base model
+    print(f"\n[{arch}] Phase 2: Fine-tuning top 50 layers of base model (15 epochs)...")
     base_model.trainable = True
+    # Freeze the first 100 layers; unfreeze the rest
+    for layer in base_model.layers[:100]:
+        layer.trainable = False
     model.compile(
-        optimizer=tf.keras.optimizers.Adam(learning_rate=1e-5),
+        optimizer=tf.keras.optimizers.Adam(learning_rate=5e-5),
         loss="categorical_crossentropy",
         metrics=["accuracy"],
     )
-    
+
     early_stopping = tf.keras.callbacks.EarlyStopping(
-        monitor='val_loss',
-        patience=2,
+        monitor='val_accuracy',
+        patience=5,
         restore_best_weights=True,
         verbose=1
     )
     lr_scheduler = tf.keras.callbacks.ReduceLROnPlateau(
         monitor='val_loss',
-        factor=0.2,
-        patience=1,
-        min_lr=1e-6,
+        factor=0.3,
+        patience=2,
+        min_lr=1e-7,
         verbose=1
     )
-    
+
     start_time = time.time()
     history_p2 = model.fit(
         train_ds,
         validation_data=val_ds,
-        epochs=5,
+        epochs=15,
         callbacks=[early_stopping, lr_scheduler],
         verbose=1,
     )
     p2_time = time.time() - start_time
     total_time = p1_time + p2_time
-    
+
     val_acc_history = history_p2.history.get("val_accuracy", [])
     if not val_acc_history:
         val_acc_history = history_p1.history.get("val_accuracy", [0.0])
     best_acc = max(val_acc_history)
-    
+
     print(f"\n[{arch}] Training completed in {total_time:.2f}s (P1: {p1_time:.2f}s, P2: {p2_time:.2f}s)")
     print(f"[{arch}] Best Validation Accuracy: {best_acc:.4f}")
-    
+
     return model, best_acc
 
 
@@ -353,9 +366,14 @@ def main():
         if not args.skip_download:
             data_dir = download_dataset(args.dataset)
         else:
-            data_dir = CACHE_DIR / "data"
-            if not data_dir.exists():
-                raise FileNotFoundError("Cached data not found")
+            # First try the actual kagglehub cache location (d:/k)
+            if KAGGLE_DATA_DIR.exists():
+                data_dir = KAGGLE_DATA_DIR
+                print(f"Using existing Kaggle cache at {KAGGLE_DATA_DIR}")
+            else:
+                data_dir = CACHE_DIR / "data"
+                if not data_dir.exists():
+                    raise FileNotFoundError(f"Cached data not found at {KAGGLE_DATA_DIR} or {CACHE_DIR}/data")
         train_ds, val_ds, class_names = prepare_dataset(data_dir)
     except Exception as e:
         print(f"\n[WARNING] Failed to load Kaggle dataset: {e}")

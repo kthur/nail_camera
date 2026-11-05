@@ -84,7 +84,7 @@ object TFLiteClassifier {
                 labels
             } else {
                 // Fallback label mapping matching python train script defaults
-                val defaultLabels = listOf("NORMAL", "ONYCHOMYCOSIS", "PALLOR", "DISCOLORATION", "UNKNOWN")
+                val defaultLabels = listOf("Acral_Lentiginous_Melanoma", "Healthy_Nail", "Onychogryphosis", "blue_finger", "clubbing", "pitting")
                 if (defaultLabels.size == numClasses) defaultLabels else List(numClasses) { "Class_$it" }
             }
 
@@ -103,15 +103,25 @@ object TFLiteClassifier {
 
     fun mapToCondition(rawLabel: String): String {
         return when {
+            // Kaggle dataset classes (nikhilgurav21/nail-disease-detection-dataset)
+            rawLabel.equals("Healthy_Nail", ignoreCase = true) -> "healthy"
+            rawLabel.equals("Acral_Lentiginous_Melanoma", ignoreCase = true) -> "melanonychia"
+            rawLabel.equals("blue_finger", ignoreCase = true) -> "spoon_nails"
+            rawLabel.equals("clubbing", ignoreCase = true) -> "spoon_nails"
+            rawLabel.equals("pitting", ignoreCase = true) -> "vertical_ridges"
+            rawLabel.equals("Onychogryphosis", ignoreCase = true) -> "spoon_nails"
+            // Legacy / other dataset mappings (preserved for backward compatibility)
             rawLabel.contains("Healthy", ignoreCase = true) || rawLabel.contains("NORMAL", ignoreCase = true) -> "healthy"
-            rawLabel.contains("Melanonychia", ignoreCase = true) -> "pigmentation"
+            rawLabel.contains("Melanonychia", ignoreCase = true) -> "melanonychia"
             rawLabel.contains("Nail_Lichen_Planus", ignoreCase = true) -> "vertical_ridges"
-            rawLabel.contains("Onychomycosis", ignoreCase = true) -> "white_spots"
+            rawLabel.contains("Onychomycosis", ignoreCase = true) -> "onychomycosis"
             rawLabel.contains("Psoriasis", ignoreCase = true) ||
             rawLabel.contains("Pitting", ignoreCase = true) -> "vertical_ridges"
             rawLabel.contains("Onychogryphosis", ignoreCase = true) -> "spoon_nails"
-            rawLabel.contains("PALLOR", ignoreCase = true) -> "spoon_nails"
-            rawLabel.contains("DISCOLORATION", ignoreCase = true) -> "white_spots"
+            rawLabel.contains("blue", ignoreCase = true) || rawLabel.contains("PALLOR", ignoreCase = true) -> "spoon_nails"
+            rawLabel.contains("clubbing", ignoreCase = true) -> "spoon_nails"
+            rawLabel.contains("DISCOLORATION", ignoreCase = true) -> "onychomycosis"
+            rawLabel.contains("Melanoma", ignoreCase = true) -> "melanonychia"
             else -> "brittle"
         }
     }
@@ -133,7 +143,7 @@ object TFLiteClassifier {
                 .map { it.trim() }
                 .filter { it.isNotEmpty() }
         } catch (t: Throwable) {
-            listOf("NORMAL", "ONYCHOMYCOSIS", "PALLOR", "DISCOLORATION", "UNKNOWN")
+            listOf("Acral_Lentiginous_Melanoma", "Healthy_Nail", "Onychogryphosis", "blue_finger", "clubbing", "pitting")
         }
     }
 
