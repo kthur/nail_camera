@@ -7,6 +7,7 @@ import com.example.nailnutri.data.db.NailDatabase
 import com.example.nailnutri.data.db.NailResultDao
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -49,7 +50,7 @@ class DefaultDataRepository(context: Context) : DataRepository {
     private val prefs: SharedPreferences = context.getSharedPreferences("nail_nutri_prefs", Context.MODE_PRIVATE)
     private val json = Json { ignoreUnknownKeys = true }
     private val dao: NailResultDao = NailDatabase.getDatabase(context).nailResultDao()
-    private val scope = CoroutineScope(Dispatchers.IO)
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     override val history: Flow<List<NailAnalysisResult>> = dao.getAllHistoryFlow().map { list ->
         list.map { DbMapper.toDomain(it) }

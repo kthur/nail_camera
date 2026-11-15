@@ -2,6 +2,7 @@ package com.example.nailnutri.analysis
 
 import android.graphics.Bitmap
 import android.graphics.Color
+import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.sqrt
@@ -360,12 +361,12 @@ internal object NailFeatureExtractor {
             for (i in 0 until xLen) {
                 if (!interior[j][i]) continue
                 if (i + 1 < xLen && interior[j][i + 1]) {
-                    localVDiffs.add(Math.abs(gridV[j][i] - gridV[j][i + 1]))
-                    localRDiffs.add(Math.abs(gridR[j][i] - gridR[j][i + 1]))
+                    localVDiffs.add(abs(gridV[j][i] - gridV[j][i + 1]))
+                    localRDiffs.add(abs(gridR[j][i] - gridR[j][i + 1]))
                 }
                 if (j + 1 < yLen && interior[j + 1][i]) {
-                    localVDiffs.add(Math.abs(gridV[j][i] - gridV[j + 1][i]))
-                    localRDiffs.add(Math.abs(gridR[j][i] - gridR[j + 1][i]))
+                    localVDiffs.add(abs(gridV[j][i] - gridV[j + 1][i]))
+                    localRDiffs.add(abs(gridR[j][i] - gridR[j + 1][i]))
                 }
             }
         }
@@ -474,11 +475,11 @@ internal object NailFeatureExtractor {
         val pBodyAvgB = if (pBodyCount > 0) pBodyB / pBodyCount else 0.0
         val pBodyAvgV = if (pBodyCount > 0) pBodyV / pBodyCount else 0.0
 
-        val pdR = Math.abs(pLunAvgR - pBodyAvgR) / 255.0
-        val pdG = Math.abs(pLunAvgG - pBodyAvgG) / 255.0
-        val pdB = Math.abs(pLunAvgB - pBodyAvgB) / 255.0
+        val pdR = abs(pLunAvgR - pBodyAvgR) / 255.0
+        val pdG = abs(pLunAvgG - pBodyAvgG) / 255.0
+        val pdB = abs(pLunAvgB - pBodyAvgB) / 255.0
         val pDist = sqrt(pdR * pdR + pdG * pdG + pdB * pdB)
-        val pdV = Math.abs(pLunAvgV - pBodyAvgV) / (pBodyAvgV + 1e-5)
+        val pdV = abs(pLunAvgV - pBodyAvgV) / (pBodyAvgV + 1e-5)
         val pBlueShift = max(0.0, (pLunAvgB / (pLunAvgR + 1e-5)) - (pBodyAvgB / (pBodyAvgR + 1e-5)))
 
         val prodLunulaContrast = maxOf(pDist, pdV, pBlueShift).toFloat()
@@ -756,11 +757,11 @@ internal object NailFeatureExtractor {
         val bodyAvgB = if (bodyCount > 0) bodyBSum / bodyCount else 0.0
         val bodyAvgV = if (bodyCount > 0) bodyVSum / bodyCount else 0.0
 
-        val dR = Math.abs(lunulaAvgR - bodyAvgR) / 255.0
-        val dG = Math.abs(lunulaAvgG - bodyAvgG) / 255.0
-        val dB = Math.abs(lunulaAvgB - bodyAvgB) / 255.0
+        val dR = abs(lunulaAvgR - bodyAvgR) / 255.0
+        val dG = abs(lunulaAvgG - bodyAvgG) / 255.0
+        val dB = abs(lunulaAvgB - bodyAvgB) / 255.0
         val rgbDist = sqrt(dR * dR + dG * dG + dB * dB)
-        val dV = Math.abs(lunulaAvgV - bodyAvgV) / (bodyAvgV + 1e-5)
+        val dV = abs(lunulaAvgV - bodyAvgV) / (bodyAvgV + 1e-5)
         val blueShift = max(0.0, (lunulaAvgB / (lunulaAvgR + 1e-5)) - (bodyAvgB / (bodyAvgR + 1e-5)))
 
         val lunulaContrastVal = maxOf(rgbDist, dV, blueShift)

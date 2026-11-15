@@ -1,4 +1,4 @@
-package com.example.nailnutri.ui.scan
+﻿package com.example.nailnutri.ui.scan
 
 import android.Manifest
 import android.content.Context
@@ -45,6 +45,8 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
+import androidx.compose.animation.core.*
+import androidx.compose.ui.draw.rotate
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.nailnutri.analysis.GeminiAnalyzer
@@ -133,31 +135,7 @@ fun CameraScanScreen(
                 .background(Color.Black)
                 .padding(paddingValues)
         ) {
-            if (analyzing) {
-                Box(
-                    modifier = Modifier.fillMaxSize(),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(16.dp)
-                    ) {
-                        CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
-                        Text(
-                            text = "AI 분석 진행 중...",
-                            color = Color.White,
-                            style = MaterialTheme.typography.titleMedium
-                        )
-                        Text(
-                            text = "손톱의 무늬, 질감, 색상을 파악하여 영양 결핍 정보를 산출하고 있습니다.",
-                            color = Color.White.copy(alpha = 0.7f),
-                            textAlign = TextAlign.Center,
-                            style = MaterialTheme.typography.bodySmall,
-                            modifier = Modifier.padding(horizontal = 32.dp)
-                        )
-                    }
-                }
-            } else if (!hasCameraPermission) {
+            if (!hasCameraPermission) {
                 Column(
                     modifier = Modifier
                         .fillMaxSize()
@@ -400,6 +378,38 @@ fun CameraScanScreen(
                             }
                         )
                     }
+
+                    // 분석 중 로딩 오버레이
+                    if (analyzing) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .background(Color.Black.copy(alpha = 0.65f)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.spacedBy(16.dp)
+                            ) {
+                                CircularProgressIndicator(
+                                    color = NutriGreen,
+                                    strokeWidth = 3.dp,
+                                    modifier = Modifier.size(52.dp)
+                                )
+                                Text(
+                                    "손톱 분석 중...",
+                                    color = Color.White,
+                                    fontSize = 17.sp,
+                                    fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold
+                                )
+                                Text(
+                                    "잠시만 기다려 주세요",
+                                    color = Color.White.copy(alpha = 0.7f),
+                                    fontSize = 13.sp
+                                )
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -492,11 +502,11 @@ fun CameraOverlay(modifier: Modifier = Modifier) {
         // 1. 손가락 실루엣 (점선)
         val fingerPath = Path().apply {
             moveTo(xOffset + cardWidth * 0.2f, yOffset + cardHeight)
-            quadraticBezierTo(
+            quadraticTo(
                 xOffset + cardWidth * 0.2f, yOffset + cardHeight * 0.3f,
                 xOffset + cardWidth * 0.5f, yOffset + cardHeight * 0.25f
             )
-            quadraticBezierTo(
+            quadraticTo(
                 xOffset + cardWidth * 0.8f, yOffset + cardHeight * 0.3f,
                 xOffset + cardWidth * 0.8f, yOffset + cardHeight * 0.9f
             )
@@ -519,15 +529,15 @@ fun CameraOverlay(modifier: Modifier = Modifier) {
             val nailBottom = yOffset + cardHeight * 0.55f
             
             moveTo(nailLeft, nailBottom)
-            quadraticBezierTo(
+            quadraticTo(
                 nailLeft - 5f, nailTop + 15f,
                 xOffset + cardWidth * 0.5f, nailTop
             )
-            quadraticBezierTo(
+            quadraticTo(
                 nailRight + 5f, nailTop + 15f,
                 nailRight, nailBottom
             )
-            quadraticBezierTo(
+            quadraticTo(
                 xOffset + cardWidth * 0.5f, nailBottom - 10f,
                 nailLeft, nailBottom
             )

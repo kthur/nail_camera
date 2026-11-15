@@ -13,6 +13,7 @@ import java.nio.channels.FileChannel
 object TFLiteClassifier {
 
     private var interpreter: Interpreter? = null
+    private var gpuDelegate: GpuDelegate? = null
     private var labels: List<String> = emptyList()
     private var isLoaded = false
 
@@ -25,12 +26,16 @@ object TFLiteClassifier {
             // Try loading with GPU Delegate first, fall back to multi-threaded CPU if GPU delegate fails
             var loadedInterp: Interpreter? = null
             try {
+                val delegate = GpuDelegate()
+                gpuDelegate = delegate
                 val gpuOptions = Interpreter.Options().apply {
-                    addDelegate(GpuDelegate())
+                    addDelegate(delegate)
                     setNumThreads(4)
                 }
                 loadedInterp = Interpreter(modelBuffer, gpuOptions)
             } catch (t: Throwable) {
+                gpuDelegate?.close()
+                gpuDelegate = null
                 // Fallback to CPU interpreter
                 try {
                     val cpuOptions = Interpreter.Options().apply {
@@ -59,6 +64,14 @@ object TFLiteClassifier {
     }
 
     fun isAvailable(): Boolean = isLoaded && interpreter != null
+
+    fun release() {
+        interpreter?.close()
+        gpuDelegate?.close()
+        interpreter = null
+        gpuDelegate = null
+        isLoaded = false
+    }
 
     fun classify(bitmap: Bitmap): List<Pair<String, Float>> {
         val interp = interpreter ?: return emptyList()

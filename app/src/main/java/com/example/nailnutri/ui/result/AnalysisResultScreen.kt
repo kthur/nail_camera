@@ -1,5 +1,7 @@
-package com.example.nailnutri.ui.result
+﻿package com.example.nailnutri.ui.result
 
+import android.content.Context
+import android.content.Intent
 import android.graphics.BitmapFactory
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -13,6 +15,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Restaurant
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -61,6 +64,12 @@ fun AnalysisResultScreen(
                     }
                 },
                 actions = {
+                    result?.let { r ->
+                        val ctx = LocalContext.current
+                        IconButton(onClick = { shareResult(ctx, r) }) {
+                            Icon(Icons.Default.Share, contentDescription = "결과 공유")
+                        }
+                    }
                     IconButton(onClick = onNavigateToHome) {
                         Icon(Icons.Default.Home, contentDescription = "홈으로")
                     }
@@ -99,7 +108,7 @@ fun AnalysisResultScreen(
                 Spacer(modifier = Modifier.height(16.dp))
 
                 // Tab Switcher
-                TabRow(
+                PrimaryTabRow(
                     selectedTabIndex = selectedTab,
                     containerColor = MaterialTheme.colorScheme.background,
                     modifier = Modifier.padding(horizontal = 16.dp)
@@ -215,6 +224,44 @@ fun AnalysisResultScreen(
     }
 }
 
+fun shareResult(context: Context, result: NailAnalysisResult) {
+    val sb = StringBuilder()
+    sb.appendLine("🔬 NailNutri 손톱 영양 분석 결과")
+    sb.appendLine("촬영일시: ${result.date}")
+    sb.appendLine()
+
+    if (result.symptoms.isNotEmpty()) {
+        sb.appendLine("📋 감지된 증상:")
+        result.symptoms.forEach { sb.appendLine("  • $it") }
+        sb.appendLine()
+    }
+
+    if (result.deficientNutrients.isNotEmpty()) {
+        sb.appendLine("⚠️ 결핍 영양소:")
+        result.deficientNutrients.forEach { nutrient ->
+            val severity = if (nutrient.severity.lowercase() == "severe") "심각 결핍" else "경미 결핍"
+            sb.appendLine("  • ${nutrient.name} [$severity]")
+            sb.appendLine("    ${nutrient.symptomExplanation}")
+            if (nutrient.recommendedFoods.isNotEmpty()) {
+                sb.appendLine("    추천 식품: ${nutrient.recommendedFoods.joinToString(", ")}")
+            }
+        }
+        sb.appendLine()
+    }
+
+    sb.appendLine("💡 종합 라이프스타일 처방:")
+    sb.appendLine(result.overallAdvice)
+    sb.appendLine()
+    sb.appendLine("※ 본 결과는 AI 이미지 분석 정보이며, 의학적 진단이 아닙니다.")
+
+    val intent = Intent(Intent.ACTION_SEND).apply {
+        type = "text/plain"
+        putExtra(Intent.EXTRA_TEXT, sb.toString())
+    }
+    context.startActivity(Intent.createChooser(intent, "결과 공유"))
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ResultHeader(result: NailAnalysisResult) {
     val context = LocalContext.current

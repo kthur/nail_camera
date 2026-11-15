@@ -3,6 +3,7 @@ package com.example.nailnutri.analysis
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Color
+import kotlin.math.abs
 import com.example.nailnutri.data.NailAnalysisResult
 import com.example.nailnutri.data.NutrientDetail
 import com.example.nailnutri.data.SufficientNutrientDetail
@@ -133,7 +134,7 @@ object NailClassifier {
                     for (y in 30 until 170) {
                         val vSelf = allV[y * 150 + x]
                         val vRight = allV[y * 150 + (x + 1)]
-                        gradSum += Math.abs(vSelf - vRight)
+                        gradSum += abs(vSelf - vRight)
                     }
                     colGradients[x] = gradSum
                 }
@@ -186,7 +187,7 @@ object NailClassifier {
                         val vSelf = allV[y * 150 + x]
                         val vNext = allV[(y + 1) * 150 + x]
                         sumV += vSelf
-                        gradSum += Math.abs(vSelf - vNext)
+                        gradSum += abs(vSelf - vNext)
                     }
                     rowV[y] = sumV / 100.0
                     rowGrads[y] = gradSum
@@ -350,6 +351,7 @@ object NailClassifier {
             try {
                 if (TFLiteClassifier.load(context)) {
                     val crops = getMultiCrops(bitmap)
+                    try {
                     val predictions = crops.map { TFLiteClassifier.getTopPrediction(it) }
                     
                     val labelScores = predictions.groupBy { it.first }
@@ -365,6 +367,9 @@ object NailClassifier {
                         val mockId = UUID.randomUUID().toString()
                         val symptomRegions = localizeSymptoms(condition, bitmap).ifEmpty { localizeSymptoms(finalLabel, bitmap) }
                         return buildSingleConditionResult(condition, imagePath, dateStr, mockId, symptomRegions)
+                    }
+                    } finally {
+                        crops.forEach { if (it != bitmap) it.recycle() }
                     }
                 }
             } catch (t: Throwable) {
