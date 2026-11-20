@@ -29,11 +29,11 @@ object DbMapper {
             id = entity.id,
             date = entity.date,
             imagePath = entity.imagePath,
-            symptoms = json.decodeFromString(entity.symptomsJson),
-            deficientNutrients = json.decodeFromString(entity.deficientNutrientsJson),
-            sufficientNutrients = json.decodeFromString(entity.sufficientNutrientsJson),
+            symptoms = runCatching { json.decodeFromString<List<String>>(entity.symptomsJson) }.getOrDefault(emptyList()),
+            deficientNutrients = runCatching { json.decodeFromString<List<NutrientDetail>>(entity.deficientNutrientsJson) }.getOrDefault(emptyList()),
+            sufficientNutrients = runCatching { json.decodeFromString<List<SufficientNutrientDetail>>(entity.sufficientNutrientsJson) }.getOrDefault(emptyList()),
             overallAdvice = entity.overallAdvice,
-            symptomRegions = json.decodeFromString(entity.symptomRegionsJson)
+            symptomRegions = runCatching { json.decodeFromString<List<SymptomRegion>>(entity.symptomRegionsJson) }.getOrDefault(emptyList())
         )
     }
 
@@ -53,8 +53,8 @@ object DbMapper {
             id = entity.id,
             createdAt = entity.createdAt,
             label = entity.label,
-            resultIds = json.decodeFromString(entity.resultIdsJson),
-            topDeficiencies = json.decodeFromString(entity.topDeficienciesJson),
+            resultIds = runCatching { json.decodeFromString<List<String>>(entity.resultIdsJson) }.getOrDefault(emptyList()),
+            topDeficiencies = runCatching { json.decodeFromString<List<String>>(entity.topDeficienciesJson) }.getOrDefault(emptyList()),
             overallScore = entity.overallScore
         )
     }

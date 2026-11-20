@@ -9,12 +9,14 @@ import android.os.Build
 import android.os.VibrationEffect
 import android.os.Vibrator
 import android.provider.Settings
+import androidx.camera.core.Camera
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ExperimentalGetImage
 import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.Preview
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
+import kotlinx.coroutines.Dispatchers
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
@@ -58,6 +60,15 @@ fun PpgScanScreen(
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
     val scope = rememberCoroutineScope()
+    var cameraInstance by remember { mutableStateOf<Camera?>(null) }
+
+    DisposableEffect(Unit) {
+        onDispose {
+            try {
+                cameraInstance?.cameraControl?.enableTorch(false)
+            } catch (e: Exception) {}
+        }
+    }
 
     var hasCameraPermission by remember {
         mutableStateOf(
@@ -174,60 +185,71 @@ fun PpgScanScreen(
                                 }
                                 
                                 val imageAnalysis = ImageAnalysis.Builder()
+                                    .setOutputImageFormat(ImageAnalysis.OUTPUT_IMAGE_FORMAT_RGBA_8888)
                                     .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
                                     .build()
                                     
+                                var cachedBytes: ByteArray? = null
                                 imageAnalysis.setAnalyzer(cameraExecutor) { imageProxy ->
                                     val mediaImage = imageProxy.image
                                     if (mediaImage != null) {
                                         val buffer = mediaImage.planes[0].buffer
-                                        val bytes = ByteArray(buffer.remaining())
-                                        buffer.get(bytes)
+                                        val remaining = buffer.remaining()
+                                        var localBytes = cachedBytes
+                                        if (localBytes == null || localBytes.size != remaining) {
+                                            localBytes = ByteArray(remaining)
+                                            cachedBytes = localBytes
+                                        }
+                                        buffer.get(localBytes, 0, remaining)
                                         
                                         var rSum = 0.0; var gSum = 0.0; var bSum = 0.0
-                                        val step = (bytes.size / 200).coerceAtLeast(4)
+                                        val step = (localBytes.size / 200).coerceAtLeast(4)
                                         var count = 0
                                         
-                                        for (i in 0 until bytes.size - 4 step step) {
-                                            val r = bytes[i].toInt() and 0xFF
-                                            val g = bytes[i+1].toInt() and 0xFF
-                                            val b = bytes[i+2].toInt() and 0xFF
+                                        for (i in 0 until localBytes.size - 4 step step) {
+                                            val r = localBytes[i].toInt() and 0xFF
+                                            val g = localBytes[i+1].toInt() and 0xFF
+                                            val b = localBytes[i+2].toInt() and 0xFF
                                             rSum += r; gSum += g; bSum += b
                                             count++
                                         }
                                         
-                                        val avgR = rSum / count
-                                        val avgG = gSum / count
-                                        val avgB = bSum / count
+                                        val avgR = if (count > 0) rSum / count else 0.0
+                                        val avgG = if (count > 0) gSum / count else 0.0
+                                        val avgB = if (count > 0) bSum / count else 0.0
                                         
                                         val fingerPresent = avgR > 200 && avgG < 65 && avgB < 65
-                                        isFingerDetected = fingerPresent
                                         
-                                        if (fingerPresent && isMeasuring) {
-                                            val signal = avgR - (avgG * 1.5)
-                                            redBuffer.add(signal)
-                                            timestampBuffer.add(System.currentTimeMillis())
+                                        scope.launch(Dispatchers.Main) {
+                                            isFingerDetected = fingerPresent
                                             
-                                            waveformPoints.add(signal.toFloat())
-                                            if (waveformPoints.size > 100) {
-                                                waveformPoints.removeAt(0)
-                                            }
-                                            
-                                            progress += 1.0f / (30.0f * 10.0f)
-                                            if (progress >= 1f) {
-                                                isMeasuring = false
+                                            if (fingerPresent && isMeasuring) {
+                                                val signal = avgR - (avgG * 1.5)
+                                                redBuffer.add(signal)
+                                                timestampBuffer.add(System.currentTimeMillis())
                                                 
-                                                val vibrator = context.getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
-                                                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                                                    vibrator.vibrate(VibrationEffect.createOneShot(120, VibrationEffect.DEFAULT_AMPLITUDE))
-                                                } else {
-                                                    vibrator.vibrate(120)
+                                                waveformPoints.add(signal.toFloat())
+                                                if (waveformPoints.size > 100) {
+                                                    waveformPoints.removeAt(0)
                                                 }
                                                 
-                                                scope.launch {
-                                                    val res = PPGAnalyzer.analyzePPG(redBuffer.toDoubleArray(), timestampBuffer.toLongArray(), "ppg_heart_pulse.png")
-                                                    repository.saveResult(res)
-                                                    onAnalysisComplete(res.id)
+                                                progress += 1.0f / (30.0f * 10.0f)
+                                                if (progress >= 1f) {
+                                                    isMeasuring = false
+                                                    
+                                                    val vibrator = context.getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator
+                                                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                                                        vibrator?.vibrate(VibrationEffect.createOneShot(120, VibrationEffect.DEFAULT_AMPLITUDE))
+                                                    } else {
+                                                        @Suppress("DEPRECATION")
+                                                        vibrator?.vibrate(120)
+                                                    }
+                                                    
+                                                    scope.launch {
+                                                        val res = PPGAnalyzer.analyzePPG(redBuffer.toDoubleArray(), timestampBuffer.toLongArray(), "ppg_heart_pulse.png")
+                                                        repository.saveResult(res)
+                                                        onAnalysisComplete(res.id)
+                                                    }
                                                 }
                                             }
                                         }
@@ -244,6 +266,7 @@ fun PpgScanScreen(
                                         preview,
                                         imageAnalysis
                                     )
+                                    cameraInstance = cam
                                     cam.cameraControl.enableTorch(true)
                                 } catch (e: Exception) {
                                     e.printStackTrace()

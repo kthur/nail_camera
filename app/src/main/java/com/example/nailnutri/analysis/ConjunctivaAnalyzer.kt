@@ -17,12 +17,15 @@ object ConjunctivaAnalyzer {
         val height = bitmap.height
         if (width <= 0 || height <= 0) return buildHealthyResult(imagePath)
 
+        val pixels = IntArray(width * height)
+        bitmap.getPixels(pixels, 0, width, 0, 0, width, height)
+
         // Calculate average luma
         var totalLuma = 0.0
         var lumaCount = 0
         for (y in 0 until height step 4) {
             for (x in 0 until width step 4) {
-                val pixel = bitmap.getPixel(x, y)
+                val pixel = pixels[y * width + x]
                 val r = Color.red(pixel)
                 val g = Color.green(pixel)
                 val b = Color.blue(pixel)
@@ -51,7 +54,7 @@ object ConjunctivaAnalyzer {
         
         for (y in (height * 0.2).toInt()..(height * 0.5).toInt()) {
             for (x in (width * 0.2).toInt()..(width * 0.8).toInt()) {
-                val pixel = bitmap.getPixel(x, y)
+                val pixel = pixels[y * width + x]
                 val r = Color.red(pixel)
                 val g = Color.green(pixel)
                 val b = Color.blue(pixel)
@@ -81,7 +84,7 @@ object ConjunctivaAnalyzer {
         
         for (y in (height * 0.55).toInt()..(height * 0.85).toInt()) {
             for (x in (width * 0.25).toInt()..(width * 0.75).toInt()) {
-                val pixel = bitmap.getPixel(x, y)
+                val pixel = pixels[y * width + x]
                 val r = (Color.red(pixel) * scaleR).coerceIn(0.0, 255.0)
                 val g = (Color.green(pixel) * scaleG).coerceIn(0.0, 255.0)
                 val b = (Color.blue(pixel) * scaleB).coerceIn(0.0, 255.0)

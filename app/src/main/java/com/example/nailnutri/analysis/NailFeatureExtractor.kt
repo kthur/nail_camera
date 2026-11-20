@@ -409,25 +409,15 @@ internal object NailFeatureExtractor {
             }
         }
 
-        var prodMaxDip = 0.0
-        for (j in (prodYStart + 3)..(prodYEnd - 3)) {
-            if (prodRowCount[j] == 0) continue
-            var baseSum = 0.0
-            var baseCount = 0
-            for (offset in intArrayOf(-4, -3, 3, 4)) {
-                val nj = j + offset
-                if (nj in prodYStart..prodYEnd && prodRowCount[nj] > 0) {
-                    baseSum += prodRowV[nj]
-                    baseCount++
-                }
-            }
-            val baseV = if (baseCount > 0) baseSum / baseCount else avgV
-            val dip = (baseV - prodRowV[j]) / (baseV + 1e-5)
-            if (dip > prodMaxDip) {
-                prodMaxDip = dip
-            }
-        }
-        val prodBeausScore = max(0.0, prodMaxDip).toFloat()
+        val prodBeausScore = computeBeausLinesScore(
+            rowBrightness = prodRowV,
+            rowPixelCount = prodRowCount,
+            yStart = prodYStart,
+            yEnd = prodYEnd,
+            baseFallbackV = avgV,
+            offsets = intArrayOf(-4, -3, 3, 4),
+            margin = 3
+        )
         val prodHasBeausLines = prodBeausScore > 0.16f && !isDarkEdges && !isUnevenTexture
 
         // 5.2 Lunula Abnormality: Proximal bottom region vs body reference
@@ -475,14 +465,10 @@ internal object NailFeatureExtractor {
         val pBodyAvgB = if (pBodyCount > 0) pBodyB / pBodyCount else 0.0
         val pBodyAvgV = if (pBodyCount > 0) pBodyV / pBodyCount else 0.0
 
-        val pdR = abs(pLunAvgR - pBodyAvgR) / 255.0
-        val pdG = abs(pLunAvgG - pBodyAvgG) / 255.0
-        val pdB = abs(pLunAvgB - pBodyAvgB) / 255.0
-        val pDist = sqrt(pdR * pdR + pdG * pdG + pdB * pdB)
-        val pdV = abs(pLunAvgV - pBodyAvgV) / (pBodyAvgV + 1e-5)
-        val pBlueShift = max(0.0, (pLunAvgB / (pLunAvgR + 1e-5)) - (pBodyAvgB / (pBodyAvgR + 1e-5)))
-
-        val prodLunulaContrast = maxOf(pDist, pdV, pBlueShift).toFloat()
+        val prodLunulaContrast = computeLunulaContrast(
+            pLunAvgR, pLunAvgG, pLunAvgB, pLunAvgV,
+            pBodyAvgR, pBodyAvgG, pBodyAvgB, pBodyAvgV
+        )
         val prodHasLunulaAbnormality = prodLunulaContrast > 0.20f && !isDarkEdges && !isPale
 
         // 5.3 Onychomycosis: Yellow-brown / white discoloration with HSV range H in [18, 68], S >= 0.18, V >= 0.25
@@ -503,7 +489,7 @@ internal object NailFeatureExtractor {
                 }
             }
         }
-        val prodFungalScore = prodFungalCount.toFloat() / max(1, prodInteriorCount)
+        val prodFungalScore = computeFungalScore(prodFungalCount, prodInteriorCount)
         val prodHasOnychomycosis = prodFungalScore > 0.035f && !isDarkEdges
 
         // 5.4 Melanonychia: Longitudinal dark column band spanning proximal to distal with high continuity
@@ -512,11 +498,7 @@ internal object NailFeatureExtractor {
         val prodMelJMin = (yLen * 0.15).toInt()
         val prodMelJMax = (yLen * 0.85).toInt()
 
-        var prodMaxContinuity = 0.0
-        var prodBestContrast = 0.0
-        var prodDarkCols = 0
-        val prodEvalCols = prodMelIMax - prodMelIMin + 1
-
+        val prodColStats = mutableListOf<Pair<Double, Double>>()
         for (i in prodMelIMin..prodMelIMax) {
             var colDark = 0
             var colV = 0.0
@@ -532,18 +514,12 @@ internal object NailFeatureExtractor {
             }
             val continuity = if (validInCol > 0) colDark.toDouble() / validInCol else 0.0
             val colMeanV = if (validInCol > 0) colV / validInCol else 0.0
-            if (continuity >= 0.50) {
-                prodDarkCols++
-            }
-            if (continuity > prodMaxContinuity) {
-                prodMaxContinuity = continuity
-                prodBestContrast = max(0.0, (avgV - colMeanV) / (avgV + 1e-5))
-            }
+            prodColStats.add(Pair(continuity, colMeanV))
         }
 
-        val prodDarkColRatio = if (prodEvalCols > 0) prodDarkCols.toDouble() / prodEvalCols else 0.0
-        val prodMelScore = (prodBestContrast * prodMaxContinuity).coerceIn(0.0, 1.0).toFloat()
-        val prodHasMelanonychia = prodMelScore > 0.25f && prodMaxContinuity >= 0.60 && prodDarkColRatio <= 0.25 && !isDarkEdges && !isUnevenTexture
+        val prodMelMetrics = computeMelanonychiaBandScore(prodColStats, avgV)
+        val prodMelScore = prodMelMetrics.bandScore
+        val prodHasMelanonychia = prodMelMetrics.isMelanonychia(isDarkEdges, isUnevenTexture)
 
         return NailFeatures(
             averageRedness = avgR,
@@ -692,26 +668,15 @@ internal object NailFeatureExtractor {
             }
         }
 
-        var maxRowDip = 0.0
-        for (y in (beausYStart + 4)..(beausYEnd - 4)) {
-            if (rowPixelCount[y] == 0) continue
-            val neighborOffsets = intArrayOf(-5, -4, -3, 3, 4, 5)
-            var baseSum = 0.0
-            var baseCount = 0
-            for (offset in neighborOffsets) {
-                val ny = y + offset
-                if (ny in beausYStart..beausYEnd && rowPixelCount[ny] > 0) {
-                    baseSum += rowBrightness[ny]
-                    baseCount++
-                }
-            }
-            val baseV = if (baseCount > 0) baseSum / baseCount else interiorAvgV
-            val dip = (baseV - rowBrightness[y]) / (baseV + 1e-5)
-            if (dip > maxRowDip) {
-                maxRowDip = dip
-            }
-        }
-        val beausLinesScore = max(0.0, maxRowDip).toFloat()
+        val beausLinesScore = computeBeausLinesScore(
+            rowBrightness = rowBrightness,
+            rowPixelCount = rowPixelCount,
+            yStart = beausYStart,
+            yEnd = beausYEnd,
+            baseFallbackV = interiorAvgV,
+            offsets = intArrayOf(-5, -4, -3, 3, 4, 5),
+            margin = 4
+        )
         val hasBeausLines = beausLinesScore > 0.16f && !isDarkEdges && !isUnevenTexture
 
         // 2. Lunula Abnormality: Proximal bottom region vs body reference
@@ -757,19 +722,14 @@ internal object NailFeatureExtractor {
         val bodyAvgB = if (bodyCount > 0) bodyBSum / bodyCount else 0.0
         val bodyAvgV = if (bodyCount > 0) bodyVSum / bodyCount else 0.0
 
-        val dR = abs(lunulaAvgR - bodyAvgR) / 255.0
-        val dG = abs(lunulaAvgG - bodyAvgG) / 255.0
-        val dB = abs(lunulaAvgB - bodyAvgB) / 255.0
-        val rgbDist = sqrt(dR * dR + dG * dG + dB * dB)
-        val dV = abs(lunulaAvgV - bodyAvgV) / (bodyAvgV + 1e-5)
-        val blueShift = max(0.0, (lunulaAvgB / (lunulaAvgR + 1e-5)) - (bodyAvgB / (bodyAvgR + 1e-5)))
-
-        val lunulaContrastVal = maxOf(rgbDist, dV, blueShift)
-        val lunulaContrast = lunulaContrastVal.toFloat()
+        val lunulaContrast = computeLunulaContrast(
+            lunulaAvgR, lunulaAvgG, lunulaAvgB, lunulaAvgV,
+            bodyAvgR, bodyAvgG, bodyAvgB, bodyAvgV
+        )
         val hasLunulaAbnormality = lunulaContrast > 0.20f && !isDarkEdges && !isPale
 
         // 3. Onychomycosis: Yellow-brown / white discoloration with HSV range
-        val fungalColorScore = fungalPixelCount.toFloat() / max(1, interiorCount)
+        val fungalColorScore = computeFungalScore(fungalPixelCount, interiorCount)
         val hasOnychomycosis = fungalColorScore > 0.035f && !isDarkEdges
 
         // 4. Melanonychia: Longitudinal dark column band spanning proximal to distal
@@ -779,11 +739,7 @@ internal object NailFeatureExtractor {
         val melYMax = (height * 0.85).toInt()
         val melHeight = melYMax - melYMin + 1
 
-        var maxContinuity = 0.0
-        var bestStripeContrast = 0.0
-        var darkColumnsCount = 0
-        val evaluatedColumns = melXMax - melXMin + 1
-
+        val legacyColStats = mutableListOf<Pair<Double, Double>>()
         for (x in melXMin..melXMax) {
             var colDarkCount = 0
             var colVSum = 0.0
@@ -799,18 +755,12 @@ internal object NailFeatureExtractor {
             }
             val continuity = if (melHeight > 0) colDarkCount.toDouble() / melHeight else 0.0
             val colAvgV = if (melHeight > 0) colVSum / melHeight else 0.0
-            if (continuity >= 0.50) {
-                darkColumnsCount++
-            }
-            if (continuity > maxContinuity) {
-                maxContinuity = continuity
-                bestStripeContrast = max(0.0, (interiorAvgV - colAvgV) / (interiorAvgV + 1e-5))
-            }
+            legacyColStats.add(Pair(continuity, colAvgV))
         }
 
-        val darkColRatio = if (evaluatedColumns > 0) darkColumnsCount.toDouble() / evaluatedColumns else 0.0
-        val melanonychiaBandScore = (bestStripeContrast * maxContinuity).coerceIn(0.0, 1.0).toFloat()
-        val hasMelanonychia = melanonychiaBandScore > 0.25f && maxContinuity >= 0.60 && darkColRatio <= 0.25 && !isDarkEdges && !isUnevenTexture
+        val legacyMelMetrics = computeMelanonychiaBandScore(legacyColStats, interiorAvgV)
+        val melanonychiaBandScore = legacyMelMetrics.bandScore
+        val hasMelanonychia = legacyMelMetrics.isMelanonychia(isDarkEdges, isUnevenTexture)
 
         return NailFeatures(
             averageRedness = avgR, averageSaturation = avgS, averageBrightness = avgV,
@@ -898,5 +848,93 @@ internal object NailFeatureExtractor {
         }
         if (n == 0) return 0.0
         return sqrt(sum / n)
+    }
+
+    private fun computeBeausLinesScore(
+        rowBrightness: DoubleArray,
+        rowPixelCount: IntArray,
+        yStart: Int,
+        yEnd: Int,
+        baseFallbackV: Double,
+        offsets: IntArray,
+        margin: Int
+    ): Float {
+        var maxDip = 0.0
+        for (y in (yStart + margin)..(yEnd - margin)) {
+            if (rowPixelCount[y] == 0) continue
+            var baseSum = 0.0
+            var baseCount = 0
+            for (offset in offsets) {
+                val ny = y + offset
+                if (ny in yStart..yEnd && rowPixelCount[ny] > 0) {
+                    baseSum += rowBrightness[ny]
+                    baseCount++
+                }
+            }
+            val baseV = if (baseCount > 0) baseSum / baseCount else baseFallbackV
+            val dip = (baseV - rowBrightness[y]) / (baseV + 1e-5)
+            if (dip > maxDip) {
+                maxDip = dip
+            }
+        }
+        return max(0.0, maxDip).toFloat()
+    }
+
+    private fun computeLunulaContrast(
+        lunulaAvgR: Double,
+        lunulaAvgG: Double,
+        lunulaAvgB: Double,
+        lunulaAvgV: Double,
+        bodyAvgR: Double,
+        bodyAvgG: Double,
+        bodyAvgB: Double,
+        bodyAvgV: Double
+    ): Float {
+        val dR = abs(lunulaAvgR - bodyAvgR) / 255.0
+        val dG = abs(lunulaAvgG - bodyAvgG) / 255.0
+        val dB = abs(lunulaAvgB - bodyAvgB) / 255.0
+        val rgbDist = sqrt(dR * dR + dG * dG + dB * dB)
+        val dV = abs(lunulaAvgV - bodyAvgV) / (bodyAvgV + 1e-5)
+        val blueShift = max(0.0, (lunulaAvgB / (lunulaAvgR + 1e-5)) - (bodyAvgB / (bodyAvgR + 1e-5)))
+        return maxOf(rgbDist, dV, blueShift).toFloat()
+    }
+
+    private fun computeFungalScore(
+        fungalPixelCount: Int,
+        interiorCount: Int
+    ): Float {
+        return fungalPixelCount.toFloat() / max(1, interiorCount)
+    }
+
+    private data class MelanonychiaMetrics(
+        val bandScore: Float,
+        val maxContinuity: Double,
+        val darkColRatio: Double
+    ) {
+        fun isMelanonychia(isDarkEdges: Boolean, isUnevenTexture: Boolean): Boolean =
+            bandScore > 0.25f && maxContinuity >= 0.60 && darkColRatio <= 0.25 && !isDarkEdges && !isUnevenTexture
+    }
+
+    private fun computeMelanonychiaBandScore(
+        colStats: List<Pair<Double, Double>>,
+        baseAvgV: Double
+    ): MelanonychiaMetrics {
+        var maxContinuity = 0.0
+        var bestStripeContrast = 0.0
+        var darkColumnsCount = 0
+        val evalCols = colStats.size
+
+        for ((continuity, colMeanV) in colStats) {
+            if (continuity >= 0.50) {
+                darkColumnsCount++
+            }
+            if (continuity > maxContinuity) {
+                maxContinuity = continuity
+                bestStripeContrast = max(0.0, (baseAvgV - colMeanV) / (baseAvgV + 1e-5))
+            }
+        }
+        val darkColRatio = if (evalCols > 0) darkColumnsCount.toDouble() / evalCols else 0.0
+        val bandScore = (bestStripeContrast * maxContinuity).coerceIn(0.0, 1.0).toFloat()
+        return MelanonychiaMetrics(bandScore, maxContinuity, darkColRatio)
     }
 }

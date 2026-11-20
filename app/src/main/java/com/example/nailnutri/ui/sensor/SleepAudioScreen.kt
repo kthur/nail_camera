@@ -247,37 +247,43 @@ fun SleepAudioScreen(
                                     } catch (e: Exception) { null }
                                     
                                     val buffer = ShortArray(bufferSize)
-                                    audioRecord?.startRecording()
-                                    
-                                    val sampleLoops = 25
-                                    for (loop in 0 until sampleLoops) {
-                                        if (!isRecording) break
+                                    try {
+                                        audioRecord?.startRecording()
                                         
-                                        val read = audioRecord?.read(buffer, 0, bufferSize) ?: 0
-                                        if (read > 0) {
-                                            var sumSq = 0.0
-                                            for (i in 0 until read) {
-                                                recordBufferList.add(buffer[i])
-                                                sumSq += (buffer[i].toDouble() * buffer[i].toDouble())
+                                        val sampleLoops = 25
+                                        for (loop in 0 until sampleLoops) {
+                                            if (!isRecording) break
+                                            
+                                            val read = audioRecord?.read(buffer, 0, bufferSize) ?: 0
+                                            if (read > 0) {
+                                                var sumSq = 0.0
+                                                for (i in 0 until read) {
+                                                    recordBufferList.add(buffer[i])
+                                                    sumSq += (buffer[i].toDouble() * buffer[i].toDouble())
+                                                }
+                                                
+                                                val rms = sqrt(sumSq / read)
+                                                val db = (20 * log10(rms + 1e-5)).coerceIn(10.0, 100.0).toFloat()
+                                                currentDb = db
+                                                
+                                                withContext(Dispatchers.Main) {
+                                                    audioHistory.add(db)
+                                                }
                                             }
+                                            delay(200)
                                             
-                                            val rms = sqrt(sumSq / read)
-                                            val db = (20 * log10(rms + 1e-5)).coerceIn(10.0, 100.0).toFloat()
-                                            currentDb = db
-                                            
-                                            withContext(Dispatchers.Main) {
-                                                audioHistory.add(db)
+                                            if (loop % 5 == 0 && loop > 0) {
+                                                countdown--
                                             }
                                         }
-                                        delay(200)
-                                        
-                                        if (loop % 5 == 0 && loop > 0) {
-                                            countdown--
-                                        }
+                                    } finally {
+                                        try {
+                                            audioRecord?.stop()
+                                        } catch (e: Exception) {}
+                                        try {
+                                            audioRecord?.release()
+                                        } catch (e: Exception) {}
                                     }
-                                    
-                                    audioRecord?.stop()
-                                    audioRecord?.release()
                                 }
                                 
                                 isRecording = false

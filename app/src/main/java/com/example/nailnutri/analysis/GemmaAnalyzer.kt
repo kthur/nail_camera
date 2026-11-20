@@ -82,6 +82,18 @@ object GemmaAnalyzer {
         return inference
     }
 
+    @Synchronized
+    fun release() {
+        try {
+            cachedLlmInference?.close()
+        } catch (e: Exception) {
+            e.printStackTrace()
+        } finally {
+            cachedLlmInference = null
+            cachedModelPath = null
+        }
+    }
+
     suspend fun analyzeNail(
         context: Context,
         bitmap: Bitmap,

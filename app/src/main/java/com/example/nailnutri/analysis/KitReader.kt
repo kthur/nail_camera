@@ -21,13 +21,15 @@ object KitReader {
         val startX = (width * 0.3).toInt()
         val endX = (width * 0.8).toInt()
         val scanY = height / 2
+        val rowPixels = IntArray(width)
+        bitmap.getPixels(rowPixels, 0, width, 0, scanY, width, 1)
         val length = endX - startX + 1
         if (length > 0) {
             var sum = 0.0
             val values = DoubleArray(length)
             for (i in 0 until length) {
                 val x = startX + i
-                val pixel = bitmap.getPixel(x, scanY)
+                val pixel = rowPixels[x]
                 val r = Color.red(pixel)
                 val g = Color.green(pixel)
                 val b = Color.blue(pixel)
@@ -62,7 +64,7 @@ object KitReader {
         
         val intensities = DoubleArray(width)
         for (x in 0 until width) {
-            val pixel = bitmap.getPixel(x, scanY)
+            val pixel = rowPixels[x]
             val r = Color.red(pixel)
             val g = Color.green(pixel)
             val b = Color.blue(pixel)

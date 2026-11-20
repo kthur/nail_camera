@@ -2,9 +2,12 @@ package com.example.nailnutri.data
 
 import android.content.Context
 import android.content.SharedPreferences
+import androidx.security.crypto.EncryptedSharedPreferences
+import androidx.security.crypto.MasterKey
 import com.example.nailnutri.data.db.DbMapper
 import com.example.nailnutri.data.db.NailDatabase
 import com.example.nailnutri.data.db.NailResultDao
+import java.io.File
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -48,6 +51,23 @@ interface DataRepository {
 
 class DefaultDataRepository(context: Context) : DataRepository {
     private val prefs: SharedPreferences = context.getSharedPreferences("nail_nutri_prefs", Context.MODE_PRIVATE)
+    private val securePrefs: SharedPreferences by lazy {
+        try {
+            val masterKey = MasterKey.Builder(context)
+                .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
+                .build()
+            EncryptedSharedPreferences.create(
+                context,
+                "nail_nutri_secure_prefs",
+                masterKey,
+                EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
+                EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
+            )
+        } catch (e: Throwable) {
+            // Graceful fallback for JVM unit tests or environments where Android Keystore is unavailable
+            prefs
+        }
+    }
     private val json = Json { ignoreUnknownKeys = true }
     private val dao: NailResultDao = NailDatabase.getDatabase(context).nailResultDao()
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -93,7 +113,12 @@ class DefaultDataRepository(context: Context) : DataRepository {
     }
 
     private fun loadSettings() {
-        _apiKey.value = prefs.getString("api_key", "") ?: ""
+        val savedKey = try {
+            securePrefs.getString("api_key", null)
+        } catch (e: Throwable) {
+            null
+        } ?: prefs.getString("api_key", "") ?: ""
+        _apiKey.value = savedKey
         _isMockMode.value = prefs.getBoolean("is_mock_mode", true)
         _gemmaModelPath.value = prefs.getString("gemma_model_path", "/data/local/tmp/gemma.bin") ?: "/data/local/tmp/gemma.bin"
         _useGemma.value = prefs.getBoolean("use_gemma", false)
@@ -107,23 +132,39 @@ class DefaultDataRepository(context: Context) : DataRepository {
     private fun migrateIfNeeded() {
         if (prefs.contains("scan_history") || prefs.contains("session_reports")) {
             scope.launch {
-                val historyJson = prefs.getString("scan_history", "[]") ?: "[]"
-                try {
-                    val list = json.decodeFromString<List<NailAnalysisResult>>(historyJson)
-                    list.forEach { dao.insertResult(DbMapper.toEntity(it)) }
-                } catch (e: Exception) {
-                    e.printStackTrace()
+                var historyMigrated = false
+                var sessionsMigrated = false
+
+                if (prefs.contains("scan_history")) {
+                    val historyJson = prefs.getString("scan_history", "[]") ?: "[]"
+                    try {
+                        val list = json.decodeFromString<List<NailAnalysisResult>>(historyJson)
+                        list.forEach { dao.insertResult(DbMapper.toEntity(it)) }
+                        historyMigrated = true
+                    } catch (e: Exception) {
+                        e.printStackTrace()
+                    }
+                } else {
+                    historyMigrated = true
                 }
 
-                val sessionsJson = prefs.getString("session_reports", "[]") ?: "[]"
-                try {
-                    val list = json.decodeFromString<List<SessionReport>>(sessionsJson)
-                    list.forEach { dao.insertSession(DbMapper.toEntity(it)) }
-                } catch (e: Exception) {
-                    e.printStackTrace()
+                if (prefs.contains("session_reports")) {
+                    val sessionsJson = prefs.getString("session_reports", "[]") ?: "[]"
+                    try {
+                        val list = json.decodeFromString<List<SessionReport>>(sessionsJson)
+                        list.forEach { dao.insertSession(DbMapper.toEntity(it)) }
+                        sessionsMigrated = true
+                    } catch (e: Exception) {
+                        e.printStackTrace()
+                    }
+                } else {
+                    sessionsMigrated = true
                 }
 
-                prefs.edit().remove("scan_history").remove("session_reports").apply()
+                val editor = prefs.edit()
+                if (historyMigrated) editor.remove("scan_history")
+                if (sessionsMigrated) editor.remove("session_reports")
+                editor.apply()
             }
         }
     }
@@ -133,15 +174,48 @@ class DefaultDataRepository(context: Context) : DataRepository {
     }
 
     override suspend fun deleteResult(id: String) {
+        try {
+            val entity = dao.getResultById(id)
+            if (entity != null && entity.imagePath.isNotBlank()) {
+                val file = File(entity.imagePath)
+                if (file.exists()) {
+                    file.delete()
+                }
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
         dao.deleteResultById(id)
     }
 
     override suspend fun clearHistory() {
+        try {
+            val list = dao.getAllHistoryDirect()
+            list.forEach { entity ->
+                if (entity.imagePath.isNotBlank()) {
+                    val file = File(entity.imagePath)
+                    if (file.exists()) {
+                        file.delete()
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
         dao.clearHistory()
     }
 
     override suspend fun setApiKey(key: String) {
-        prefs.edit().putString("api_key", key).apply()
+        var encrypted = false
+        try {
+            securePrefs.edit().putString("api_key", key).apply()
+            encrypted = (securePrefs !== prefs)
+        } catch (e: Throwable) {
+            prefs.edit().putString("api_key", key).apply()
+        }
+        if (encrypted && key.isNotEmpty()) {
+            prefs.edit().remove("api_key").apply()
+        }
         _apiKey.value = key
     }
 

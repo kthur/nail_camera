@@ -12,6 +12,9 @@ interface NailResultDao {
     @Query("SELECT * FROM nail_analysis_results")
     suspend fun getAllHistoryDirect(): List<NailAnalysisResultEntity>
 
+    @Query("SELECT * FROM nail_analysis_results WHERE id = :id LIMIT 1")
+    suspend fun getResultById(id: String): NailAnalysisResultEntity?
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertResult(result: NailAnalysisResultEntity)
 

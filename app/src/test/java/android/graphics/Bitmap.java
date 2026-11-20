@@ -45,6 +45,14 @@ public class Bitmap {
         }
     }
 
+    public void setPixels(int[] pixels, int offset, int stride, int x, int y, int width, int height) {
+        for (int j = 0; j < height; j++) {
+            for (int i = 0; i < width; i++) {
+                this.pixels[x + i][y + j] = pixels[offset + j * stride + i];
+            }
+        }
+    }
+
     public static Bitmap createBitmap(int width, int height, Config config) {
         return new Bitmap(width, height);
     }

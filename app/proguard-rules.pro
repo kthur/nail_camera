@@ -66,3 +66,15 @@
 # ---------------------------------------------------------------------------
 -keepattributes SourceFile,LineNumberTable
 -renamesourcefileattribute SourceFile
+
+# ---------------------------------------------------------------------------
+# MediaPipe GenAI Tasks (Gemma)
+# ---------------------------------------------------------------------------
+-keep class com.google.mediapipe.tasks.genai.** { *; }
+-dontwarn com.google.mediapipe.tasks.genai.**
+
+# ---------------------------------------------------------------------------
+# Google Generative AI (Gemini)
+# ---------------------------------------------------------------------------
+-keep class com.google.ai.client.generativeai.** { *; }
+-dontwarn com.google.ai.client.generativeai.**

@@ -93,10 +93,20 @@ fun VoiceAnalysisScreen(
         "관절이 쑤시고 뼈가 약해진 느낌이에요"
     )
 
+    var activeRecognizer by remember { mutableStateOf<SpeechRecognizer?>(null) }
+    DisposableEffect(context) {
+        onDispose {
+            activeRecognizer?.destroy()
+            activeRecognizer = null
+        }
+    }
+
     val startSpeechRecognition = remember(context) {
         { onResult: (String) -> Unit ->
             if (SpeechRecognizer.isRecognitionAvailable(context)) {
+                activeRecognizer?.destroy()
                 val recognizer = SpeechRecognizer.createSpeechRecognizer(context)
+                activeRecognizer = recognizer
                 val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
                     putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
                     putExtra(RecognizerIntent.EXTRA_LANGUAGE, Locale.KOREA.toString())
@@ -107,12 +117,21 @@ fun VoiceAnalysisScreen(
                     override fun onRmsChanged(rmsdB: Float) {}
                     override fun onBufferReceived(buffer: ByteArray?) {}
                     override fun onEndOfSpeech() {}
-                    override fun onError(error: Int) {}
+                    override fun onError(error: Int) {
+                        try {
+                            recognizer.destroy()
+                        } catch (e: Exception) {}
+                        if (activeRecognizer == recognizer) activeRecognizer = null
+                    }
                     override fun onResults(results: Bundle?) {
                         val matches = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
                         if (!matches.isNullOrEmpty()) {
                             onResult(matches[0])
                         }
+                        try {
+                            recognizer.destroy()
+                        } catch (e: Exception) {}
+                        if (activeRecognizer == recognizer) activeRecognizer = null
                     }
                     override fun onPartialResults(partialResults: Bundle?) {
                         val matches = partialResults?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
@@ -285,29 +304,35 @@ fun VoiceAnalysisScreen(
                                 } else { null }
 
                                 val buffer = ShortArray(bufferSize)
-                                audioRecord?.startRecording()
+                                try {
+                                    audioRecord?.startRecording()
 
-                                for (loop in 0 until 25) {
-                                    val read = audioRecord?.read(buffer, 0, bufferSize) ?: 0
-                                    if (read > 0) {
-                                        for (i in 0 until read) {
-                                            recordBufferList.add(buffer[i])
-                                        }
+                                    for (loop in 0 until 25) {
+                                        val read = audioRecord?.read(buffer, 0, bufferSize) ?: 0
+                                        if (read > 0) {
+                                            for (i in 0 until read) {
+                                                recordBufferList.add(buffer[i])
+                                            }
 
-                                        var absSum = 0f
-                                        for (i in 0 until read) {
-                                            absSum += kotlin.math.abs(buffer[i].toFloat())
+                                            var absSum = 0f
+                                            for (i in 0 until read) {
+                                                absSum += kotlin.math.abs(buffer[i].toFloat())
+                                            }
+                                            voiceSignalProgress = (absSum / (read * 8000f)).coerceIn(0.1f, 1.0f)
                                         }
-                                        voiceSignalProgress = (absSum / (read * 8000f)).coerceIn(0.1f, 1.0f)
+                                        delay(200)
+                                        if (loop % 5 == 0 && loop > 0) {
+                                            countdown--
+                                        }
                                     }
-                                    delay(200)
-                                    if (loop % 5 == 0 && loop > 0) {
-                                        countdown--
-                                    }
+                                } finally {
+                                    try {
+                                        audioRecord?.stop()
+                                    } catch (e: Exception) {}
+                                    try {
+                                        audioRecord?.release()
+                                    } catch (e: Exception) {}
                                 }
-
-                                audioRecord?.stop()
-                                audioRecord?.release()
                             }
 
                             isRecording = false

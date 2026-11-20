@@ -33,6 +33,8 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.nailnutri.viewmodel.MainViewModel
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import com.example.nailnutri.data.NailAnalysisResult
 import com.example.nailnutri.theme.*
 import java.io.File
@@ -323,8 +325,23 @@ fun ResultHeader(result: NailAnalysisResult) {
             // Render captured local image file
             val file = File(result.imagePath)
             if (file.exists()) {
-                val bitmap = remember(result.imagePath) {
-                    BitmapFactory.decodeFile(file.absolutePath)
+                val bitmap by produceState<android.graphics.Bitmap?>(initialValue = null, result.imagePath) {
+                    value = withContext(Dispatchers.IO) {
+                        try {
+                            val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+                            BitmapFactory.decodeFile(file.absolutePath, bounds)
+                            val maxDim = maxOf(bounds.outWidth, bounds.outHeight)
+                            val sampleSize = when {
+                                maxDim > 2048 -> 4
+                                maxDim > 1024 -> 2
+                                else -> 1
+                            }
+                            val decodeOptions = BitmapFactory.Options().apply { inSampleSize = sampleSize }
+                            BitmapFactory.decodeFile(file.absolutePath, decodeOptions)
+                        } catch (e: Exception) {
+                            null
+                        }
+                    }
                 }
                 bitmap?.let { b ->
                     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
