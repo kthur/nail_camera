@@ -76,7 +76,12 @@ object HolisticBiomarkerEngine {
             var matchedInResult = false
 
             for (nutrient in res.deficientNutrients) {
-                val weight = if (nutrient.severity.equals("severe", ignoreCase = true)) 18 else 10
+                // 3-tier severity penalty: severe=18, moderate=10, mild=5
+                val weight = when {
+                    nutrient.severity.equals("severe", ignoreCase = true) -> 18
+                    nutrient.severity.equals("moderate", ignoreCase = true) -> 10
+                    else -> 5
+                }
                 val matched = isNutrientMatchingPillar(pillar, nutrient.name, nutrient.symptomExplanation)
                 if (matched) {
                     baseScore -= weight
@@ -90,11 +95,13 @@ object HolisticBiomarkerEngine {
             if (relevantSymptoms.isNotEmpty()) {
                 symptomsFound.addAll(relevantSymptoms)
                 if (!matchedInResult) {
-                    baseScore -= 10
+                    // Symptom-only penalty: 8 (was 10) — lighter since no nutrient confirmation
+                    baseScore -= 8
                 }
             }
         }
 
+        // Allow recovery: cap minimum at 15 (was 15) but cap deduction per result at -40 total
         val finalScore = baseScore.coerceIn(15, 100)
         val status = when {
             finalScore >= 80 -> "최적"
@@ -152,7 +159,9 @@ object HolisticBiomarkerEngine {
         return when (pillar) {
             HealthPillar.HEMATOLOGIC -> {
                 symptom.contains("빈혈") || symptom.contains("결막") || symptom.contains("창백") ||
-                        symptom.contains("어지러") || symptom.contains("혈색")
+                        symptom.contains("어지러") || symptom.contains("혈색") ||
+                        symptom.contains("반월") || symptom.contains("저산소") ||
+                        symptom.contains("저혈색") || symptom.contains("혈구")
             }
             HealthPillar.AUTONOMIC -> {
                 symptom.contains("긴장") || symptom.contains("스트레스") || symptom.contains("떨림") ||
@@ -164,17 +173,20 @@ object HolisticBiomarkerEngine {
                 symptom.contains("갈라") || symptom.contains("세로줄") ||
                         symptom.contains("가로홈") || symptom.contains("Beau") || symptom.contains("스푼") ||
                         symptom.contains("조갑") || symptom.contains("요철") || symptom.contains("깨짐") ||
-                        symptom.contains("부스러") || symptom.contains("백색") || symptom.contains("점상")
+                        symptom.contains("부스러") || symptom.contains("백색") || symptom.contains("점상") ||
+                        symptom.contains("손톱") || symptom.contains("흰 반점") || symptom.contains("수평 홈")
             }
             HealthPillar.RESPIRATORY_SLEEP -> {
                 symptom.contains("코골이") || symptom.contains("무호흡") ||
                         (symptom.contains("호흡") && (symptom.contains("장애") || symptom.contains("불안") || symptom.contains("곤란"))) ||
-                        (symptom.contains("dB") && !symptom.contains("정상"))
+                        (symptom.contains("dB") && !symptom.contains("정상")) ||
+                        symptom.contains("수면") || symptom.contains("저호흡")
             }
             HealthPillar.METABOLIC_IMMUNE -> {
                 symptom.contains("피로") || symptom.contains("구강") || symptom.contains("무좀") ||
                         symptom.contains("진균") || symptom.contains("염증") || symptom.contains("성대") ||
-                        symptom.contains("입안") || symptom.contains("혓바늘") || symptom.contains("설염")
+                        symptom.contains("입안") || symptom.contains("혓바늘") || symptom.contains("설염") ||
+                        symptom.contains("면역") || symptom.contains("대사") || symptom.contains("황갈")
             }
         }
     }
@@ -249,6 +261,28 @@ object HolisticBiomarkerEngine {
                     physiologicalMechanism = "아연 및 비타민 B 코엔자임 결핍으로 조갑 기질 세포 분열과 단백질 합성이 저해되어 진균 침투 방어가 취약해진 상태입니다.",
                     biomarkerEvidence = evidence,
                     clinicalActionPlan = "아연(15~30mg)과 비오틴(5000mcg), 고품질 필수 아미노산(단백질) 섭취를 4주 이상 지속하세요."
+                )
+            )
+        }
+
+        // 4. Hematologic-Metabolic Depletion Cascade (Hematologic + Metabolic/Immune)
+        // When both iron-related and metabolic/immune pillars are compromised simultaneously
+        if (hemScore < 70 && metScore < 65) {
+            val evidence = mutableListOf<String>()
+            val hemEvidence = pillars[HealthPillar.HEMATOLOGIC]?.contributingSymptoms ?: emptyList()
+            val metEvidence = pillars[HealthPillar.METABOLIC_IMMUNE]?.contributingSymptoms ?: emptyList()
+            if (hemEvidence.isNotEmpty()) evidence.add(hemEvidence.first()) else evidence.add("결막 창백 / 반월 소실 / 저혈색 손톱")
+            if (metEvidence.isNotEmpty()) evidence.add(metEvidence.first()) else evidence.add("진균 감염 소견 / 면역 피로 증상")
+            evidence.add("철분 결핍이 면역세포(대식세포, NK세포) 활성을 동시에 저하시키는 복합 소진")
+
+            syndromes.add(
+                CrossModalSyndrome(
+                    id = "SYN_HEMATOLOGIC_METABOLIC_CASCADE",
+                    title = "빈혈 연계 면역 소진 복합 증후군",
+                    severity = "High",
+                    physiologicalMechanism = "철분 및 비타민 B12 복합 결핍이 적혈구 성숙을 저해하고 동시에 T세포·NK세포의 세포독성 활성도를 감소시켜 감염 취약성이 복합적으로 증가한 상태입니다.",
+                    biomarkerEvidence = evidence,
+                    clinicalActionPlan = "헴철(붉은 고기, 조개류)을 비타민 C와 함께 아침에 섭취하고, 비타민 B12(1000mcg)와 아연을 동시 보충하여 면역-조혈 복합 경로를 회복하세요."
                 )
             )
         }

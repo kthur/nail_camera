@@ -17,24 +17,33 @@ object NailClassifier {
     private fun getMultiCrops(original: Bitmap): List<Bitmap> {
         val width = original.width
         val height = original.height
-        val cx = (width * 0.1).toInt()
-        val cy = (height * 0.1).toInt()
-        val cWidth = (width * 0.8).toInt().coerceAtLeast(1)
-        val cHeight = (height * 0.8).toInt().coerceAtLeast(1)
-        
-        // 1. Center Crop (Core body)
+
+        // Defensive safe dimensions
+        val cx = (width * 0.1).toInt().coerceAtLeast(0)
+        val cy = (height * 0.1).toInt().coerceAtLeast(0)
+        val cWidth = (width * 0.8).toInt().coerceAtLeast(1).coerceAtMost(width - cx)
+        val cHeight = (height * 0.8).toInt().coerceAtLeast(1).coerceAtMost(height - cy)
+
+        // 1. Center Crop (core nail body — 80% of frame)
         val centerCrop = Bitmap.createBitmap(original, cx, cy, cWidth, cHeight)
-        
-        // 2. Top Crop (Tip area)
-        val tHeight = (height * 0.45).toInt().coerceAtLeast(1)
+
+        // 2. Top Crop (nail tip distal area — upper 50%)
+        val tHeight = (height * 0.50).toInt().coerceAtLeast(1).coerceAtMost(height - cy)
         val topCrop = Bitmap.createBitmap(original, cx, cy, cWidth, tHeight)
-        
-        // 3. Bottom Crop (Lunar/Cuticle area)
-        val bHeight = (height * 0.45).toInt().coerceAtLeast(1)
-        val bY = (height * 0.45).toInt().coerceAtMost(height - bHeight)
+
+        // 3. Bottom Crop (proximal/lunula area — lower 50%)
+        val bHeight = (height * 0.50).toInt().coerceAtLeast(1)
+        val bY = (height * 0.50).toInt().coerceAtMost((height - bHeight).coerceAtLeast(0))
         val bottomCrop = Bitmap.createBitmap(original, cx, bY, cWidth, bHeight)
-        
-        return listOf(centerCrop, topCrop, bottomCrop)
+
+        // 4. Wide Center Crop (less zoom, more context)
+        val wcx = (width * 0.05).toInt().coerceAtLeast(0)
+        val wcy = (height * 0.05).toInt().coerceAtLeast(0)
+        val wcWidth = (width * 0.9).toInt().coerceAtLeast(1).coerceAtMost(width - wcx)
+        val wcHeight = (height * 0.9).toInt().coerceAtLeast(1).coerceAtMost(height - wcy)
+        val wideCrop = Bitmap.createBitmap(original, wcx, wcy, wcWidth, wcHeight)
+
+        return listOf(centerCrop, topCrop, bottomCrop, wideCrop)
     }
 
     private fun localizeSymptoms(finalLabel: String, bitmap: Bitmap): List<com.example.nailnutri.data.SymptomRegion> {
@@ -354,22 +363,43 @@ object NailClassifier {
                 if (TFLiteClassifier.load(context)) {
                     val crops = getMultiCrops(bitmap)
                     try {
-                    val predictions = crops.map { TFLiteClassifier.getTopPrediction(it) }
-                    
-                    val labelScores = predictions.groupBy { it.first }
-                        .mapValues { entry -> entry.value.sumOf { it.second.toDouble() } }
-                    val bestLabelEntry = labelScores.maxByOrNull { it.value }
-                    
-                    val finalLabel = bestLabelEntry?.key ?: "healthy"
-                    val finalConfidence = ((bestLabelEntry?.value ?: 0.0) / crops.size).toFloat()
-                    
-                    if (finalConfidence > 0.35f) {
-                        val condition = TFLiteClassifier.mapToCondition(finalLabel)
-                        val dateStr = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault()).format(Date())
-                        val mockId = UUID.randomUUID().toString()
-                        val symptomRegions = localizeSymptoms(condition, bitmap).ifEmpty { localizeSymptoms(finalLabel, bitmap) }
-                        return buildSingleConditionResult(condition, imagePath, dateStr, mockId, symptomRegions)
-                    }
+                        // Weighted voting: center crop = 2.0x, wide crop = 1.5x, distal/proximal crops = 1.0x
+                        val cropWeights = floatArrayOf(2.0f, 1.0f, 1.0f, 1.5f)
+                        val weightedLabelScores = mutableMapOf<String, Double>()
+                        var totalWeight = 0.0
+
+                        crops.forEachIndexed { idx, crop ->
+                            val w = cropWeights.getOrElse(idx) { 1.0f }.toDouble()
+                            val preds = TFLiteClassifier.classify(crop)
+                            if (preds.isNotEmpty()) {
+                                val (label, confidence) = preds.first()
+                                weightedLabelScores[label] =
+                                    (weightedLabelScores[label] ?: 0.0) + confidence * w
+                                totalWeight += w
+                            }
+                        }
+
+                        val bestLabelEntry = weightedLabelScores.maxByOrNull { it.value }
+                        val finalLabel = bestLabelEntry?.key ?: "healthy"
+                        val normalizedConfidence = if (totalWeight > 0)
+                            ((bestLabelEntry?.value ?: 0.0) / totalWeight).toFloat()
+                        else 0f
+
+                        // Adaptive threshold: raise if the top-2 labels are very close (ambiguous)
+                        val sortedScores = weightedLabelScores.values.sortedDescending()
+                        val topScore = sortedScores.getOrElse(0) { 0.0 }
+                        val runnerUp = sortedScores.getOrElse(1) { 0.0 }
+                        val margin = topScore - runnerUp
+                        // High ambiguity (margin < 0.08 of normalized): raise threshold to 0.45
+                        val dynamicThreshold = if (margin < 0.08 * totalWeight) 0.45f else 0.38f
+
+                        if (normalizedConfidence > dynamicThreshold) {
+                            val condition = TFLiteClassifier.mapToCondition(finalLabel)
+                            val dateStr = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault()).format(Date())
+                            val mockId = UUID.randomUUID().toString()
+                            val symptomRegions = localizeSymptoms(condition, bitmap).ifEmpty { localizeSymptoms(finalLabel, bitmap) }
+                            return buildSingleConditionResult(condition, imagePath, dateStr, mockId, symptomRegions)
+                        }
                     } finally {
                         crops.forEach { if (it != bitmap) it.recycle() }
                     }

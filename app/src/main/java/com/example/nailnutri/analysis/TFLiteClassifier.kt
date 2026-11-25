@@ -135,6 +135,11 @@ object TFLiteClassifier {
             rawLabel.contains("clubbing", ignoreCase = true) -> "spoon_nails"
             rawLabel.contains("DISCOLORATION", ignoreCase = true) -> "onychomycosis"
             rawLabel.contains("Melanoma", ignoreCase = true) -> "melanonychia"
+            rawLabel.contains("Beau", ignoreCase = true) -> "beaus_lines"
+            rawLabel.contains("Lunula", ignoreCase = true) -> "lunula_abnormality"
+            rawLabel.contains("Fungal", ignoreCase = true) || rawLabel.contains("Fungus", ignoreCase = true) -> "onychomycosis"
+            rawLabel.contains("Brittle", ignoreCase = true) || rawLabel.contains("Fragile", ignoreCase = true) -> "brittle"
+            // Unknown raw label: fall back to heuristic path by returning empty to trigger fallback
             else -> "brittle"
         }
     }
@@ -161,7 +166,24 @@ object TFLiteClassifier {
     }
 
     private fun resizeBitmap(bitmap: Bitmap, width: Int, height: Int): Bitmap {
-        return Bitmap.createScaledBitmap(bitmap, width, height, true)
+        val srcW = bitmap.width
+        val srcH = bitmap.height
+
+        // If input is significantly larger, do a center-crop to remove edge noise
+        // before downscaling (improves classification of nail content vs background)
+        val cropped = if (srcW > width * 2 && srcH > height * 2) {
+            val cropW = (srcW * 0.85).toInt().coerceAtLeast(width)
+            val cropH = (srcH * 0.85).toInt().coerceAtLeast(height)
+            val cx = (srcW - cropW) / 2
+            val cy = (srcH - cropH) / 2
+            Bitmap.createBitmap(bitmap, cx.coerceAtLeast(0), cy.coerceAtLeast(0), cropW, cropH)
+        } else {
+            bitmap
+        }
+
+        val result = Bitmap.createScaledBitmap(cropped, width, height, true)
+        if (cropped != bitmap && cropped != result) cropped.recycle()
+        return result
     }
 
     private fun bitmapToByteBuffer(bitmap: Bitmap, width: Int, height: Int): ByteBuffer {

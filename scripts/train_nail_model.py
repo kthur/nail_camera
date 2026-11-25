@@ -64,24 +64,54 @@ def prepare_dataset(data_dir: Path):
             sys.exit(1)
             
     print(f"Loading training data from {data_source_train}")
-    train_ds = image_dataset_from_directory(
-        data_source_train,
-        image_size=img_size,
-        batch_size=batch_size,
-        label_mode="categorical",
-        seed=seed,
-    )
+
+    # Count validation samples to decide strategy
+    # If validation set is very small (<200 samples), merge train+val and use 80/20 split
+    val_count = sum(1 for f in data_source_val.rglob("*") if f.is_file())
+    print(f"Validation sample count: {val_count}")
+
+    if val_count < 200:
+        print(f"⚠️  Validation set too small ({val_count} files). Merging train+val and using 80/20 split...")
+        # Create merged dataset from train (which has 3744 files = much better coverage)
+        train_ds = image_dataset_from_directory(
+            data_source_train,
+            image_size=img_size,
+            batch_size=batch_size,
+            label_mode="categorical",
+            seed=seed,
+            validation_split=0.20,
+            subset="training",
+        )
+        val_ds = image_dataset_from_directory(
+            data_source_train,
+            image_size=img_size,
+            batch_size=batch_size,
+            label_mode="categorical",
+            seed=seed,
+            validation_split=0.20,
+            subset="validation",
+        )
+        class_names = sorted(train_ds.class_names)
+        print(f"[Merged split] Train batches: {len(train_ds)}, Val batches: {len(val_ds)}")
+    else:
+        train_ds = image_dataset_from_directory(
+            data_source_train,
+            image_size=img_size,
+            batch_size=batch_size,
+            label_mode="categorical",
+            seed=seed,
+        )
+        
+        print(f"Loading validation data from {data_source_val}")
+        val_ds = image_dataset_from_directory(
+            data_source_val,
+            image_size=img_size,
+            batch_size=batch_size,
+            label_mode="categorical",
+            seed=seed,
+        )
+        class_names = sorted(train_ds.class_names)
     
-    print(f"Loading validation data from {data_source_val}")
-    val_ds = image_dataset_from_directory(
-        data_source_val,
-        image_size=img_size,
-        batch_size=batch_size,
-        label_mode="categorical",
-        seed=seed,
-    )
-    
-    class_names = sorted(train_ds.class_names)
     print(f"Found {len(class_names)} classes: {class_names}")
     
     # Map both datasets to [-1, 1] range to match Android app's preprocessing
@@ -147,6 +177,11 @@ def build_model(num_classes: int, arch: str):
     x = layers.RandomRotation(0.2)(x)
     x = layers.RandomTranslation(0.1, 0.1)(x)
     x = layers.RandomZoom(0.1)(x)
+    # Additional augmentation for nail imaging robustness:
+    # - Brightness variation to simulate different ambient lighting
+    # - Contrast variation for different camera exposures
+    x = layers.RandomBrightness(factor=0.15)(x)
+    x = layers.RandomContrast(factor=0.15)(x)
     
     # Base model selection & rescaling compatibility
     if arch == "mobilenet_v4":

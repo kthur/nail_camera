@@ -383,8 +383,10 @@ internal object NailFeatureExtractor {
         // Prevent false positives under excessive glossy reflection (avgV >= 0.85)
         val isLowRedness = (avgR < 135.0 || rBRatio < 1.12) && !isDarkEdges && avgV < 0.85
         val isPale = avgS < 0.20 && avgV > illumNorm * 0.96 && avgR < 185.0 && avgV < 0.85
-        val hasWhiteSpots = whiteSpotRatio > 0.015
-        val isUnevenTexture = (avgLocalVGrad > 0.022 || avgLocalRGrad > 5.5) && !isDarkEdges
+        // Raised from 0.015 → 0.022 to reduce false positives from specular highlights
+        val hasWhiteSpots = whiteSpotRatio > 0.022
+        // Tightened gradient threshold: require both V and R gradient signals to co-occur
+        val isUnevenTexture = (avgLocalVGrad > 0.025 && avgLocalRGrad > 6.0) && !isDarkEdges
 
         // 5. New condition detectors: Beau's Lines, Lunula Abnormality, Onychomycosis, Melanonychia
 
@@ -472,6 +474,7 @@ internal object NailFeatureExtractor {
         val prodHasLunulaAbnormality = prodLunulaContrast > 0.20f && !isDarkEdges && !isPale
 
         // 5.3 Onychomycosis: Yellow-brown / white discoloration with HSV range H in [18, 68], S >= 0.18, V >= 0.25
+        // Narrowed S >= 0.22 and V >= 0.30 to reduce false positives from normal skin tones
         var prodFungalCount = 0
         var prodInteriorCount = 0
         for (j in 0 until yLen) {
@@ -483,14 +486,16 @@ internal object NailFeatureExtractor {
                 if (idx < allPixels.size) {
                     val p = allPixels[idx]
                     val (h, s, v) = rgbToHsv(Color.red(p), Color.green(p), Color.blue(p))
-                    if (h in 18.0..68.0 && s >= 0.18 && v >= 0.25) {
+                    // Tighter constraints: S >= 0.22 and V >= 0.30 (was S >= 0.18, V >= 0.25)
+                    if (h in 18.0..68.0 && s >= 0.22 && v >= 0.30) {
                         prodFungalCount++
                     }
                 }
             }
         }
         val prodFungalScore = computeFungalScore(prodFungalCount, prodInteriorCount)
-        val prodHasOnychomycosis = prodFungalScore > 0.035f && !isDarkEdges
+        // Raised threshold: 0.035 → 0.045 to reduce false positives from warm-toned skin
+        val prodHasOnychomycosis = prodFungalScore > 0.045f && !isDarkEdges
 
         // 5.4 Melanonychia: Longitudinal dark column band spanning proximal to distal with high continuity
         val prodMelIMin = (xLen * 0.18).toInt()
@@ -911,8 +916,12 @@ internal object NailFeatureExtractor {
         val maxContinuity: Double,
         val darkColRatio: Double
     ) {
-        fun isMelanonychia(isDarkEdges: Boolean, isUnevenTexture: Boolean): Boolean =
-            bandScore > 0.25f && maxContinuity >= 0.60 && darkColRatio <= 0.25 && !isDarkEdges && !isUnevenTexture
+        fun isMelanonychia(isDarkEdges: Boolean, isUnevenTexture: Boolean): Boolean {
+            // Tightened continuity >= 0.62 and darkColRatio <= 0.22 to reduce false positives
+            // while keeping bandScore > 0.25 for backward test compatibility
+            return bandScore > 0.25f && maxContinuity >= 0.62 && darkColRatio <= 0.22 &&
+                    !isDarkEdges && !isUnevenTexture
+        }
     }
 
     private fun computeMelanonychiaBandScore(
