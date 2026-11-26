@@ -1,10 +1,10 @@
 package com.example.nailnutri.analysis
 
+import com.example.nailnutri.util.DateUtils
+
 import com.example.nailnutri.data.NailAnalysisResult
 import com.example.nailnutri.data.NutrientDetail
 import com.example.nailnutri.data.SufficientNutrientDetail
-import java.text.SimpleDateFormat
-import java.util.Date
 import java.util.Locale
 import java.util.UUID
 import kotlin.math.abs
@@ -20,7 +20,7 @@ object VoiceAnalyzer {
         audioSamples: ShortArray? = null,
         imagePath: String = "voice_analysis_record.wav"
     ): NailAnalysisResult {
-        val dateStr = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault()).format(Date())
+        val dateStr = DateUtils.nowFormatted()
         val mockId = UUID.randomUUID().toString()
 
         // 1. STT 텍스트 증상 파싱 Engine 수행

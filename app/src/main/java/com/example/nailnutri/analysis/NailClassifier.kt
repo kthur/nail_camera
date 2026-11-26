@@ -1,5 +1,7 @@
 package com.example.nailnutri.analysis
 
+import com.example.nailnutri.util.DateUtils
+
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Color
@@ -7,8 +9,6 @@ import kotlin.math.abs
 import com.example.nailnutri.data.NailAnalysisResult
 import com.example.nailnutri.data.NutrientDetail
 import com.example.nailnutri.data.SufficientNutrientDetail
-import java.text.SimpleDateFormat
-import java.util.Date
 import java.util.Locale
 import java.util.UUID
 
@@ -393,12 +393,26 @@ object NailClassifier {
                         // High ambiguity (margin < 0.08 of normalized): raise threshold to 0.45
                         val dynamicThreshold = if (margin < 0.08 * totalWeight) 0.45f else 0.38f
 
-                        if (normalizedConfidence > dynamicThreshold) {
-                            val condition = TFLiteClassifier.mapToCondition(finalLabel)
-                            val dateStr = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault()).format(Date())
+                        val condition = TFLiteClassifier.mapToCondition(finalLabel)
+                        // B2: Require higher confidence (>= 0.55) before returning "healthy" to avoid false reassurance
+                        val effectiveThreshold = if (condition == "healthy") {
+                            maxOf(dynamicThreshold, 0.55f)
+                        } else {
+                            dynamicThreshold
+                        }
+
+                        if (normalizedConfidence > effectiveThreshold) {
+                            val dateStr = DateUtils.nowFormatted()
                             val mockId = UUID.randomUUID().toString()
                             val symptomRegions = localizeSymptoms(condition, bitmap).ifEmpty { localizeSymptoms(finalLabel, bitmap) }
-                            return buildSingleConditionResult(condition, imagePath, dateStr, mockId, symptomRegions)
+                            return buildSingleConditionResult(
+                                condition = condition,
+                                imagePath = imagePath,
+                                dateStr = dateStr,
+                                mockId = mockId,
+                                symptomRegions = symptomRegions,
+                                confidence = normalizedConfidence
+                            )
                         }
                     } finally {
                         crops.forEach { if (it != bitmap) it.recycle() }
@@ -413,13 +427,13 @@ object NailClassifier {
     }
 
     fun buildResultForCondition(condition: String, imagePath: String): NailAnalysisResult {
-        val dateStr = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault()).format(Date())
+        val dateStr = DateUtils.nowFormatted()
         val mockId = UUID.randomUUID().toString()
         return buildSingleConditionResult(condition, imagePath, dateStr, mockId, emptyList())
     }
 
     private fun buildResultFromFeatures(features: NailFeatures, imagePath: String, bitmap: Bitmap): NailAnalysisResult {
-        val dateStr = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault()).format(Date())
+        val dateStr = DateUtils.nowFormatted()
         val mockId = UUID.randomUUID().toString()
 
         val regions = mutableListOf<com.example.nailnutri.data.SymptomRegion>()
@@ -666,7 +680,8 @@ object NailClassifier {
         imagePath: String,
         dateStr: String,
         mockId: String,
-        symptomRegions: List<com.example.nailnutri.data.SymptomRegion> = emptyList()
+        symptomRegions: List<com.example.nailnutri.data.SymptomRegion> = emptyList(),
+        confidence: Float? = null
     ): NailAnalysisResult {
         val profile = conditionRegistry[condition.lowercase(Locale.ROOT)] ?: defaultProfile
         return NailAnalysisResult(
@@ -677,7 +692,8 @@ object NailClassifier {
             deficientNutrients = profile.deficientNutrients,
             sufficientNutrients = profile.sufficientNutrients,
             overallAdvice = profile.overallAdvice,
-            symptomRegions = symptomRegions
+            symptomRegions = symptomRegions,
+            confidence = confidence
         )
     }
 }

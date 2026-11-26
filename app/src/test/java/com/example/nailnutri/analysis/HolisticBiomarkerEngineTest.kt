@@ -327,4 +327,40 @@ class HolisticBiomarkerEngineTest {
         assertTrue(report.chronoSchedule.isEmpty())
         assertTrue(report.primaryClinicalAdvice.contains("생체 항상성"))
     }
+
+    @Test
+    fun testTimeWeightedScoringPrioritizesRecentScans() {
+        val healthyOlder = NailAnalysisResult(
+            id = "h_old",
+            date = "2026-11-20 09:00",
+            imagePath = "old.jpg",
+            symptoms = listOf("정상"),
+            deficientNutrients = emptyList(),
+            sufficientNutrients = emptyList(),
+            overallAdvice = "정상"
+        )
+        val deficientNewer = NailAnalysisResult(
+            id = "d_new",
+            date = "2026-11-26 09:00",
+            imagePath = "new.jpg",
+            symptoms = listOf("빈혈"),
+            deficientNutrients = listOf(NutrientDetail("철분", "Severe", "빈혈", listOf("소고기"))),
+            sufficientNutrients = emptyList(),
+            overallAdvice = "철분 보충"
+        )
+
+        val healthyNewer = healthyOlder.copy(id = "h_new", date = "2026-11-26 09:00")
+        val deficientOlder = deficientNewer.copy(id = "d_old", date = "2026-11-20 09:00")
+
+        val reportRecentDeficient = HolisticBiomarkerEngine.evaluate(sampleSession, listOf(healthyOlder, deficientNewer))
+        val reportOlderDeficient = HolisticBiomarkerEngine.evaluate(sampleSession, listOf(deficientOlder, healthyNewer))
+
+        val recentOxy = reportRecentDeficient.pillarScores[HealthPillar.HEMATOLOGIC]!!.score
+        val olderOxy = reportOlderDeficient.pillarScores[HealthPillar.HEMATOLOGIC]!!.score
+
+        assertTrue(
+            "Recent deficiency ($recentOxy) should penalize pillar score more than older deficiency ($olderOxy)",
+            recentOxy < olderOxy
+        )
+    }
 }

@@ -35,5 +35,6 @@ data class NailAnalysisResult(
     val deficientNutrients: List<NutrientDetail>,
     val sufficientNutrients: List<SufficientNutrientDetail>,
     val overallAdvice: String,
-    val symptomRegions: List<SymptomRegion> = emptyList()
+    val symptomRegions: List<SymptomRegion> = emptyList(),
+    val confidence: Float? = null
 )

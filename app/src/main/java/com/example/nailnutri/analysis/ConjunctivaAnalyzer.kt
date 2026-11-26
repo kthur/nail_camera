@@ -1,12 +1,12 @@
 package com.example.nailnutri.analysis
 
+import com.example.nailnutri.util.DateUtils
+
 import android.graphics.Bitmap
 import android.graphics.Color
 import com.example.nailnutri.data.NailAnalysisResult
 import com.example.nailnutri.data.NutrientDetail
 import com.example.nailnutri.data.SufficientNutrientDetail
-import java.text.SimpleDateFormat
-import java.util.Date
 import java.util.Locale
 import java.util.UUID
 import kotlin.math.sqrt
@@ -32,7 +32,7 @@ object ConjunctivaAnalyzer {
         }
         val avgLuma = if (lumaCount > 0) totalLuma / lumaCount else 0.0
         if (avgLuma < 40.0 || avgLuma > 220.0) {
-            val dateStr = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault()).format(Date())
+            val dateStr = DateUtils.nowFormatted()
             return NailAnalysisResult(
                 id = UUID.randomUUID().toString(), date = dateStr, imagePath = imagePath,
                 symptoms = listOf("조도 부적합"),
@@ -117,7 +117,7 @@ object ConjunctivaAnalyzer {
         val isPallor = avgRI < 0.065 && avgNRI < 0.38  // secondary check with NRI
         val hasNonUniformRedness = riStdDev > 0.06
 
-        val dateStr = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault()).format(Date())
+        val dateStr = DateUtils.nowFormatted()
         val mockId = UUID.randomUUID().toString()
 
         return when {
@@ -171,7 +171,7 @@ object ConjunctivaAnalyzer {
     }
 
     private fun buildHealthyResult(imagePath: String): NailAnalysisResult {
-        val dateStr = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault()).format(Date())
+        val dateStr = DateUtils.nowFormatted()
         return NailAnalysisResult(
             id = UUID.randomUUID().toString(), date = dateStr, imagePath = imagePath,
             symptoms = listOf("특이사항 없음 (결막 상태 양호)"),

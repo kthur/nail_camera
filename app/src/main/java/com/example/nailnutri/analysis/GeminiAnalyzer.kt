@@ -1,5 +1,7 @@
 package com.example.nailnutri.analysis
 
+import com.example.nailnutri.util.DateUtils
+
 import android.graphics.Bitmap
 import com.example.nailnutri.data.NailAnalysisResult
 import com.example.nailnutri.data.NutrientDetail
@@ -11,8 +13,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.Serializable
-import java.text.SimpleDateFormat
-import java.util.Date
 import java.util.Locale
 import java.util.UUID
 
@@ -113,7 +113,7 @@ object GeminiAnalyzer {
             val parsed = jsonParser.decodeFromString<GeminiJsonResult>(jsonText)
             
             // Map to Domain models
-            val dateStr = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault()).format(Date())
+            val dateStr = DateUtils.nowFormatted()
             
             NailAnalysisResult(
                 id = UUID.randomUUID().toString(),

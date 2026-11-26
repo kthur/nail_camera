@@ -1,9 +1,11 @@
 package com.example.nailnutri.analysis
 
+import com.example.nailnutri.util.DateUtils
+
 import com.example.nailnutri.data.*
-import java.text.SimpleDateFormat
-import java.util.Date
 import java.util.Locale
+import kotlin.math.pow
+import kotlin.math.roundToInt
 
 /**
  * Unified Multi-Biomarker Holistic Health Engine
@@ -57,7 +59,7 @@ object HolisticBiomarkerEngine {
 
         return HolisticHealthReport(
             sessionId = session.id,
-            calculatedAt = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault()).format(Date()),
+            calculatedAt = DateUtils.nowFormatted(),
             vitalityIndex = vitalityIndex,
             vitalityGrade = vitalityGrade,
             pillarScores = pillarScores,
@@ -72,19 +74,27 @@ object HolisticBiomarkerEngine {
         val symptomsFound = mutableListOf<String>()
         val nutrientsFound = mutableListOf<String>()
 
-        for (res in results) {
+        // B5: Time-weighted scoring (exponential decay lambda = 0.8 per distinct scan date, most recent date = 1.0)
+        // Grouping by date prefix (yyyy-MM-dd) ensures multiple modalities captured in the same session keep full 1.0 weight.
+        val sortedResults = results.sortedByDescending { it.date }
+        val distinctDates = sortedResults.map { it.date.take(10) }.distinct()
+
+        for (res in sortedResults) {
+            val dayIndex = distinctDates.indexOf(res.date.take(10)).coerceAtLeast(0)
+            val decay = 0.8.pow(dayIndex.toDouble())
             var matchedInResult = false
 
             for (nutrient in res.deficientNutrients) {
                 // 3-tier severity penalty: severe=18, moderate=10, mild=5
-                val weight = when {
+                val rawWeight = when {
                     nutrient.severity.equals("severe", ignoreCase = true) -> 18
                     nutrient.severity.equals("moderate", ignoreCase = true) -> 10
                     else -> 5
                 }
+                val weightedPenalty = (rawWeight * decay).roundToInt()
                 val matched = isNutrientMatchingPillar(pillar, nutrient.name, nutrient.symptomExplanation)
                 if (matched) {
-                    baseScore -= weight
+                    baseScore -= weightedPenalty
                     nutrientsFound.add(nutrient.name)
                     matchedInResult = true
                 }
@@ -96,7 +106,7 @@ object HolisticBiomarkerEngine {
                 symptomsFound.addAll(relevantSymptoms)
                 if (!matchedInResult) {
                     // Symptom-only penalty: 8 (was 10) — lighter since no nutrient confirmation
-                    baseScore -= 8
+                    baseScore -= (8 * decay).roundToInt()
                 }
             }
         }
@@ -367,7 +377,7 @@ object HolisticBiomarkerEngine {
         }
         return HolisticHealthReport(
             sessionId = sessionId,
-            calculatedAt = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault()).format(Date()),
+            calculatedAt = DateUtils.nowFormatted(),
             vitalityIndex = 95,
             vitalityGrade = "최상 (Optimal Vitality)",
             pillarScores = optimalPillars,

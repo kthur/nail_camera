@@ -454,6 +454,31 @@ fun ResultHeader(result: NailAnalysisResult) {
                 )
             }
         }
+
+        // B4: AI Confidence badge
+        result.confidence?.let { conf ->
+            val pct = (conf * 100).toInt().coerceIn(0, 100)
+            val badgeColor = when {
+                pct >= 70 -> Color(0xFF10B981)
+                pct >= 50 -> Color(0xFFF59E0B)
+                else -> Color(0xFFEF4444)
+            }
+            Surface(
+                color = badgeColor.copy(alpha = 0.9f),
+                shape = RoundedCornerShape(16.dp),
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(12.dp)
+            ) {
+                Text(
+                    text = "분석 신뢰도: ${pct}%",
+                    color = Color.White,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 12.sp,
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
+                )
+            }
+        }
     }
 }
 

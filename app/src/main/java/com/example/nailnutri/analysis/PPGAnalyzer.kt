@@ -1,10 +1,10 @@
 package com.example.nailnutri.analysis
 
+import com.example.nailnutri.util.DateUtils
+
 import com.example.nailnutri.data.NailAnalysisResult
 import com.example.nailnutri.data.NutrientDetail
 import com.example.nailnutri.data.SufficientNutrientDetail
-import java.text.SimpleDateFormat
-import java.util.Date
 import java.util.Locale
 import java.util.UUID
 import kotlin.math.abs
@@ -134,7 +134,7 @@ object PPGAnalyzer {
         // Mineral deficiency threshold: SDNN < 32ms (clinical low HRV cutoff)
         val isMineralDeficient = sdnn < 32.0
 
-        val dateStr = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault()).format(Date())
+        val dateStr = DateUtils.nowFormatted()
         val mockId = UUID.randomUUID().toString()
 
         return if (isMineralDeficient) {
@@ -167,7 +167,7 @@ object PPGAnalyzer {
     }
 
     private fun buildDefaultResult(imagePath: String, bpm: Int, sdnn: Double, stressLevel: Int): NailAnalysisResult {
-        val dateStr = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault()).format(Date())
+        val dateStr = DateUtils.nowFormatted()
         return NailAnalysisResult(
             id = UUID.randomUUID().toString(),
             date = dateStr,

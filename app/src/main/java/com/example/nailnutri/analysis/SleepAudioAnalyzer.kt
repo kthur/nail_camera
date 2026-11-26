@@ -1,10 +1,10 @@
 package com.example.nailnutri.analysis
 
+import com.example.nailnutri.util.DateUtils
+
 import com.example.nailnutri.data.NailAnalysisResult
 import com.example.nailnutri.data.NutrientDetail
 import com.example.nailnutri.data.SufficientNutrientDetail
-import java.text.SimpleDateFormat
-import java.util.Date
 import java.util.Locale
 import java.util.UUID
 import kotlin.math.PI
@@ -103,7 +103,7 @@ object SleepAudioAnalyzer {
         // Snore percentage for display (normalized to 0-100%)
         val snorePercentage = (sber * 100.0).coerceIn(0.0, 100.0)
 
-        val dateStr = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault()).format(Date())
+        val dateStr = DateUtils.nowFormatted()
         val mockId = UUID.randomUUID().toString()
 
         return when {
@@ -165,7 +165,7 @@ object SleepAudioAnalyzer {
     )
 
     private fun buildHealthyResult(imagePath: String, snorePct: Double, db: Double, silencePct: Double): NailAnalysisResult {
-        val dateStr = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault()).format(Date())
+        val dateStr = DateUtils.nowFormatted()
         return NailAnalysisResult(
             id = UUID.randomUUID().toString(),
             date = dateStr,

@@ -1,5 +1,7 @@
 package com.example.nailnutri.analysis
 
+import com.example.nailnutri.util.DateUtils
+
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Color
@@ -12,8 +14,6 @@ import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import java.io.File
-import java.text.SimpleDateFormat
-import java.util.Date
 import java.util.Locale
 import java.util.UUID
 import kotlin.math.max
@@ -115,7 +115,7 @@ object GemmaAnalyzer {
 
             val cleanJson = cleanJsonResponse(responseText)
             val parsed = jsonParser.decodeFromString<GemmaJsonResult>(cleanJson)
-            val dateStr = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault()).format(Date())
+            val dateStr = DateUtils.nowFormatted()
 
             NailAnalysisResult(
                 id = UUID.randomUUID().toString(),
@@ -188,7 +188,7 @@ object GemmaAnalyzer {
     }
 
     private fun createFallbackResult(symptoms: List<String>, imagePath: String, errorMsg: String): NailAnalysisResult {
-        val dateStr = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault()).format(Date())
+        val dateStr = DateUtils.nowFormatted()
 
         val isHealthy = symptoms.any { it.contains("건강") || it.contains("healthy", ignoreCase = true) }
         val def = mutableListOf<NutrientDetail>()

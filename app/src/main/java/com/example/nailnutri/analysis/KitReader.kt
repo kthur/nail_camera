@@ -1,12 +1,12 @@
 package com.example.nailnutri.analysis
 
+import com.example.nailnutri.util.DateUtils
+
 import android.graphics.Bitmap
 import android.graphics.Color
 import com.example.nailnutri.data.NailAnalysisResult
 import com.example.nailnutri.data.NutrientDetail
 import com.example.nailnutri.data.SufficientNutrientDetail
-import java.text.SimpleDateFormat
-import java.util.Date
 import java.util.Locale
 import java.util.UUID
 
@@ -17,47 +17,58 @@ object KitReader {
         val height = bitmap.height
         if (width <= 10 || height <= 10) return buildDefaultResult(imagePath, 15.0)
 
-        // Compute standard deviation along the center horizontal line within the T/C scan region (from width * 0.3 to width * 0.8)
+        // B3: Multi-row scan across height * 0.35 ~ 0.65 to handle tilted or slightly misaligned kits
         val startX = (width * 0.3).toInt()
         val endX = (width * 0.8).toInt()
-        val scanY = height / 2
-        val rowPixels = IntArray(width)
-        bitmap.getPixels(rowPixels, 0, width, 0, scanY, width, 1)
         val length = endX - startX + 1
-        if (length > 0) {
-            var sum = 0.0
-            val values = DoubleArray(length)
-            for (i in 0 until length) {
-                val x = startX + i
-                val pixel = rowPixels[x]
-                val r = Color.red(pixel)
-                val g = Color.green(pixel)
-                val b = Color.blue(pixel)
-                val intensity = (r + g + b) / 3.0
-                values[i] = intensity
-                sum += intensity
-            }
-            val mean = sum / length
-            var sumSqDiff = 0.0
-            for (i in 0 until length) {
-                val diff = values[i] - mean
-                sumSqDiff += diff * diff
-            }
-            val variance = sumSqDiff / length
-            val stdDev = Math.sqrt(variance)
-            if (stdDev < 8.0) {
-                val dateStr = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault()).format(Date())
-                return NailAnalysisResult(
-                    id = UUID.randomUUID().toString(),
-                    date = dateStr,
-                    imagePath = imagePath,
-                    symptoms = listOf("키트 미감지"),
-                    deficientNutrients = emptyList(),
-                    sufficientNutrients = emptyList(),
-                    overallAdvice = "진단 키트를 감지하지 못했습니다. 키트 위치를 확인해 주세요."
-                )
+        val scanRatios = doubleArrayOf(0.35, 0.40, 0.45, 0.50, 0.55, 0.60, 0.65)
+        val candidateYs = scanRatios
+            .map { ratio -> (height * ratio).toInt().coerceIn(0, height - 1) }
+            .distinct()
+
+        var bestRowPixels: IntArray? = null
+        var bestStdDev = -1.0
+        val rowBuffer = IntArray(width)
+
+        for (scanY in candidateYs) {
+            bitmap.getPixels(rowBuffer, 0, width, 0, scanY, width, 1)
+            if (length > 0) {
+                var sum = 0.0
+                val values = DoubleArray(length)
+                for (i in 0 until length) {
+                    val pixel = rowBuffer[startX + i]
+                    val intensity = (Color.red(pixel) + Color.green(pixel) + Color.blue(pixel)) / 3.0
+                    values[i] = intensity
+                    sum += intensity
+                }
+                val mean = sum / length
+                var sumSqDiff = 0.0
+                for (i in 0 until length) {
+                    val diff = values[i] - mean
+                    sumSqDiff += diff * diff
+                }
+                val stdDev = Math.sqrt(sumSqDiff / length)
+                if (stdDev > bestStdDev) {
+                    bestStdDev = stdDev
+                    bestRowPixels = rowBuffer.copyOf()
+                }
             }
         }
+
+        if (bestRowPixels == null || bestStdDev < 8.0) {
+            val dateStr = DateUtils.nowFormatted()
+            return NailAnalysisResult(
+                id = UUID.randomUUID().toString(),
+                date = dateStr,
+                imagePath = imagePath,
+                symptoms = listOf("키트 미감지"),
+                deficientNutrients = emptyList(),
+                sufficientNutrients = emptyList(),
+                overallAdvice = "진단 키트를 감지하지 못했습니다. 키트 위치를 확인해 주세요."
+            )
+        }
+
+        val rowPixels = bestRowPixels
 
         var minIntensity = 255.0
         var maxIntensity = 0.0
@@ -102,7 +113,7 @@ object KitReader {
         val vitDLevel = (colorRatio * 45.0).coerceIn(4.0, 92.0)
         val isDeficient = vitDLevel < 30.0
 
-        val dateStr = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault()).format(Date())
+        val dateStr = DateUtils.nowFormatted()
         val mockId = UUID.randomUUID().toString()
 
         return if (isDeficient) {
@@ -124,7 +135,7 @@ object KitReader {
     }
 
     private fun buildDefaultResult(imagePath: String, level: Double): NailAnalysisResult {
-        val dateStr = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault()).format(Date())
+        val dateStr = DateUtils.nowFormatted()
         return NailAnalysisResult(
             id = UUID.randomUUID().toString(),
             date = dateStr,
