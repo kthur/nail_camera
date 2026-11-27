@@ -424,7 +424,7 @@ def main():
     num_classes = len(class_names)
 
     if args.compare:
-        architectures = ["mobilenet_v2", "mobilenet_v3_large"]
+        architectures = ["mobilenet_v2", "efficientnet_b0"]
         best_acc = -1.0
         best_model = None
         best_arch = None
