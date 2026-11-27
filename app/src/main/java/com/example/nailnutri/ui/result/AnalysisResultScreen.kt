@@ -31,7 +31,9 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.example.nailnutri.R
 import com.example.nailnutri.viewmodel.MainViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -59,21 +61,21 @@ fun AnalysisResultScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(if (isNewScan) "분석 결과" else "상세 기록") },
+                title = { Text(stringResource(if (isNewScan) R.string.result_title_new else R.string.result_title_detail)) },
                 navigationIcon = {
                     IconButton(onClick = onBackClick) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "뒤로")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.action_back))
                     }
                 },
                 actions = {
                     result?.let { r ->
                         val ctx = LocalContext.current
                         IconButton(onClick = { shareResult(ctx, r) }) {
-                            Icon(Icons.Default.Share, contentDescription = "결과 공유")
+                            Icon(Icons.Default.Share, contentDescription = stringResource(R.string.result_share))
                         }
                     }
                     IconButton(onClick = onNavigateToHome) {
-                        Icon(Icons.Default.Home, contentDescription = "홈으로")
+                        Icon(Icons.Default.Home, contentDescription = stringResource(R.string.action_home))
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
@@ -118,12 +120,12 @@ fun AnalysisResultScreen(
                     Tab(
                         selected = selectedTab == 0,
                         onClick = { selectedTab = 0 },
-                        text = { Text("필요 영양소 (${result.deficientNutrients.size})", fontWeight = FontWeight.Bold) }
+                        text = { Text(stringResource(R.string.result_tab_deficient, result.deficientNutrients.size), fontWeight = FontWeight.Bold) }
                     )
                     Tab(
                         selected = selectedTab == 1,
                         onClick = { selectedTab = 1 },
-                        text = { Text("충분 영양소 (${result.sufficientNutrients.size})", fontWeight = FontWeight.Bold) }
+                        text = { Text(stringResource(R.string.result_tab_sufficient, result.sufficientNutrients.size), fontWeight = FontWeight.Bold) }
                     )
                 }
 
@@ -194,17 +196,90 @@ fun AnalysisResultScreen(
                             )
                             Column {
                                 Text(
-                                    text = "의료 면책 조항 (Medical Disclaimer)",
+                                    text = stringResource(R.string.result_disclaimer_title),
                                     fontWeight = FontWeight.Bold,
                                     style = MaterialTheme.typography.titleSmall,
                                     color = MaterialTheme.colorScheme.error
                                 )
                                 Text(
-                                    text = "본 결과는 이미지 인식을 기초로 한 AI 분석 정보이며, 의학적 진단이 아닙니다. 특정한 신체 증상이나 질병이 의심되는 경우 반드시 전문 의료기관의 혈액 검사 및 의학 진단을 받아보셔야 합니다.",
+                                    text = stringResource(R.string.result_disclaimer_body),
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
                                     modifier = Modifier.padding(top = 4.dp),
                                     lineHeight = 15.sp
+                                )
+                            }
+                        }
+                    }
+
+                    // D1: On-device Personalization Feedback Card
+                    var feedbackChoice by remember(result.id) {
+                        mutableStateOf(viewModel.getFeedbackForResult(result.id))
+                    }
+                    Card(
+                        shape = RoundedCornerShape(16.dp),
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f)
+                        ),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(modifier = Modifier.padding(16.dp)) {
+                            Text(
+                                text = stringResource(R.string.feedback_card_title),
+                                fontWeight = FontWeight.Bold,
+                                style = MaterialTheme.typography.titleSmall
+                            )
+                            Text(
+                                text = stringResource(R.string.feedback_card_subtitle),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f),
+                                modifier = Modifier.padding(top = 2.dp, bottom = 10.dp)
+                            )
+                            if (feedbackChoice == null) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                ) {
+                                    OutlinedButton(
+                                        onClick = {
+                                            feedbackChoice = true
+                                            viewModel.submitFeedback(result.id, true)
+                                        },
+                                        modifier = Modifier.weight(1f)
+                                    ) {
+                                        Icon(
+                                            Icons.Default.CheckCircle,
+                                            contentDescription = null,
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                        Spacer(Modifier.width(6.dp))
+                                        Text(stringResource(R.string.feedback_btn_accurate))
+                                    }
+                                    OutlinedButton(
+                                        onClick = {
+                                            feedbackChoice = false
+                                            viewModel.submitFeedback(result.id, false)
+                                        },
+                                        modifier = Modifier.weight(1f)
+                                    ) {
+                                        Icon(
+                                            Icons.Default.Warning,
+                                            contentDescription = null,
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                        Spacer(Modifier.width(6.dp))
+                                        Text(stringResource(R.string.feedback_btn_inaccurate))
+                                    }
+                                }
+                            } else {
+                                Text(
+                                    text = stringResource(
+                                        if (feedbackChoice == true) R.string.feedback_thanks_accurate
+                                        else R.string.feedback_thanks_inaccurate
+                                    ),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = MaterialTheme.colorScheme.primary
                                 )
                             }
                         }
@@ -216,7 +291,7 @@ fun AnalysisResultScreen(
                         onClick = onNavigateToHome,
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        Text("메인 화면으로 이동")
+                        Text(stringResource(R.string.result_go_home))
                     }
 
                     Spacer(modifier = Modifier.height(30.dp))
@@ -471,7 +546,7 @@ fun ResultHeader(result: NailAnalysisResult) {
                     .padding(12.dp)
             ) {
                 Text(
-                    text = "분석 신뢰도: ${pct}%",
+                    text = stringResource(R.string.result_confidence_badge, pct),
                     color = Color.White,
                     fontWeight = FontWeight.Bold,
                     fontSize = 12.sp,

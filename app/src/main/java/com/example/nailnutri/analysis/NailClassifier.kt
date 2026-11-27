@@ -395,11 +395,14 @@ object NailClassifier {
 
                         val condition = TFLiteClassifier.mapToCondition(finalLabel)
                         // B2: Require higher confidence (>= 0.55) before returning "healthy" to avoid false reassurance
-                        val effectiveThreshold = if (condition == "healthy") {
+                        // D1: Apply personalized threshold offset from on-device feedback calibration
+                        val baseThreshold = if (condition == "healthy") {
                             maxOf(dynamicThreshold, 0.55f)
                         } else {
                             dynamicThreshold
                         }
+                        val effectiveThreshold = (baseThreshold + PersonalizationCalibrator.thresholdOffset)
+                            .coerceIn(0.30f, 0.75f)
 
                         if (normalizedConfidence > effectiveThreshold) {
                             val dateStr = DateUtils.nowFormatted()

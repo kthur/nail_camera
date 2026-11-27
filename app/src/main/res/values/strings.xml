@@ -1,3 +1,25 @@
 <resources>
     <string name="app_name">NailNutri</string>
+
+    <!-- Analysis Result Screen -->
+    <string name="result_title_new">분석 결과</string>
+    <string name="result_title_detail">상세 기록</string>
+    <string name="result_not_found">결과를 찾을 수 없습니다.</string>
+    <string name="result_tab_deficient">필요 영양소 (%1$d)</string>
+    <string name="result_tab_sufficient">충분 영양소 (%1$d)</string>
+    <string name="result_confidence_badge">분석 신뢰도: %1$d%%</string>
+    <string name="result_disclaimer_title">의료 면책 조항 (Medical Disclaimer)</string>
+    <string name="result_disclaimer_body">본 결과는 이미지 인식을 기초로 한 AI 분석 정보이며, 의학적 진단이 아닙니다. 특정한 신체 증상이나 질병이 의심되는 경우 반드시 전문 의료기관의 혈액 검사 및 의학 진단을 받아보셔야 합니다.</string>
+    <string name="result_go_home">메인 화면으로 이동</string>
+    <string name="result_share">결과 공유</string>
+    <string name="action_back">뒤로</string>
+    <string name="action_home">홈으로</string>
+
+    <!-- Personalization Feedback (D1) -->
+    <string name="feedback_card_title">이 AI 분석 결과가 정확했나요?</string>
+    <string name="feedback_card_subtitle">피드백은 암호화되어 온디바이스 정확도 보정에만 사용됩니다.</string>
+    <string name="feedback_btn_accurate">정확해요</string>
+    <string name="feedback_btn_inaccurate">아쉬워요</string>
+    <string name="feedback_thanks_accurate">감사합니다! 현재 분석 기준을 유지합니다.</string>
+    <string name="feedback_thanks_inaccurate">피드백이 반영되었습니다. 다음 분석부터 판정 임계값을 보정합니다.</string>
 </resources>

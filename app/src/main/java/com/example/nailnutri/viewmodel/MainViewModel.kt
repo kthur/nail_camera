@@ -77,6 +77,14 @@ class MainViewModel(
         viewModelScope.launch { repository.setOnboardingDone(done) }
     }
 
+    fun submitFeedback(resultId: String, isAccurate: Boolean) {
+        viewModelScope.launch { repository.submitAnalysisFeedback(resultId, isAccurate) }
+    }
+
+    fun getFeedbackForResult(resultId: String): Boolean? {
+        return repository.getFeedbackForResult(resultId)
+    }
+
     class Factory(private val repository: DataRepository) : ViewModelProvider.Factory {
         @Suppress("UNCHECKED_CAST")
         override fun <T : ViewModel> create(modelClass: Class<T>): T {

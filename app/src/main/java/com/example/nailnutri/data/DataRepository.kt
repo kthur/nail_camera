@@ -47,6 +47,8 @@ interface DataRepository {
     suspend fun saveSession(report: SessionReport)
     suspend fun deleteSession(id: String)
     suspend fun clearSessions()
+    suspend fun submitAnalysisFeedback(resultId: String, isAccurate: Boolean)
+    fun getFeedbackForResult(resultId: String): Boolean?
 }
 
 class DefaultDataRepository(context: Context) : DataRepository {
@@ -127,6 +129,15 @@ class DefaultDataRepository(context: Context) : DataRepository {
         _isDarkTheme.value = prefs.getBoolean("is_dark_theme", false)
         _useDynamicColor.value = prefs.getBoolean("use_dynamic_color", false)
         _reminderEnabled.value = prefs.getBoolean("reminder_enabled", false)
+
+        // D1: Restore on-device personalization calibration state from EncryptedSharedPreferences
+        try {
+            val total = securePrefs.getInt("feedback_total_count", 0)
+            val positive = securePrefs.getInt("feedback_positive_count", 0)
+            val offset = securePrefs.getFloat("calibration_offset", 0.0f)
+            com.example.nailnutri.analysis.PersonalizationCalibrator.loadState(total, positive, offset)
+        } catch (_: Throwable) {
+        }
     }
 
     private fun migrateIfNeeded() {
@@ -269,5 +280,30 @@ class DefaultDataRepository(context: Context) : DataRepository {
 
     override suspend fun clearSessions() {
         dao.clearSessions()
+    }
+
+    override suspend fun submitAnalysisFeedback(resultId: String, isAccurate: Boolean) {
+        val newOffset = com.example.nailnutri.analysis.PersonalizationCalibrator.recordFeedback(isAccurate)
+        try {
+            securePrefs.edit()
+                .putInt("feedback_total_count", com.example.nailnutri.analysis.PersonalizationCalibrator.totalFeedbackCount)
+                .putInt("feedback_positive_count", com.example.nailnutri.analysis.PersonalizationCalibrator.positiveFeedbackCount)
+                .putFloat("calibration_offset", newOffset)
+                .putString("feedback_$resultId", if (isAccurate) "accurate" else "inaccurate")
+                .apply()
+        } catch (_: Throwable) {
+        }
+    }
+
+    override fun getFeedbackForResult(resultId: String): Boolean? {
+        return try {
+            when (securePrefs.getString("feedback_$resultId", null)) {
+                "accurate" -> true
+                "inaccurate" -> false
+                else -> null
+            }
+        } catch (_: Throwable) {
+            null
+        }
     }
 }

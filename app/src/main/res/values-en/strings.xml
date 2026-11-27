@@ -1,0 +1,25 @@
+<resources>
+    <string name="app_name">NailNutri</string>
+
+    <!-- Analysis Result Screen -->
+    <string name="result_title_new">Analysis Result</string>
+    <string name="result_title_detail">Detailed Record</string>
+    <string name="result_not_found">Result not found.</string>
+    <string name="result_tab_deficient">Deficient (%1$d)</string>
+    <string name="result_tab_sufficient">Sufficient (%1$d)</string>
+    <string name="result_confidence_badge">Confidence: %1$d%%</string>
+    <string name="result_disclaimer_title">Medical Disclaimer</string>
+    <string name="result_disclaimer_body">This result is AI-based informational analysis and not a medical diagnosis. Please consult a healthcare professional for clinical blood tests and medical diagnosis.</string>
+    <string name="result_go_home">Go to Home</string>
+    <string name="result_share">Share Result</string>
+    <string name="action_back">Back</string>
+    <string name="action_home">Home</string>
+
+    <!-- Personalization Feedback (D1) -->
+    <string name="feedback_card_title">Was this AI analysis accurate?</string>
+    <string name="feedback_card_subtitle">Feedback is encrypted and used only for on-device calibration.</string>
+    <string name="feedback_btn_accurate">Accurate</string>
+    <string name="feedback_btn_inaccurate">Needs Improvement</string>
+    <string name="feedback_thanks_accurate">Thank you! Keeping current calibration.</string>
+    <string name="feedback_thanks_inaccurate">Feedback saved. Thresholds will be calibrated for future scans.</string>
+</resources>
