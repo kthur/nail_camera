@@ -50,7 +50,9 @@ import androidx.compose.ui.draw.rotate
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.nailnutri.analysis.GeminiAnalyzer
+import com.example.nailnutri.analysis.MultiFingerAggregator
 import com.example.nailnutri.analysis.NailClassifier
+import com.example.nailnutri.data.NailAnalysisResult
 import com.example.nailnutri.viewmodel.MainViewModel
 import com.example.nailnutri.theme.NutriGreen
 import kotlinx.coroutines.CoroutineScope
@@ -100,6 +102,9 @@ fun CameraScanScreen(
     var analyzing by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var showDemoSelector by remember { mutableStateOf(true) }
+    var isMultiFingerMode by remember { mutableStateOf(false) }
+    val fingerLabels = remember { listOf("엄지", "검지", "중지", "약지", "새끼") }
+    val fingerResults = remember { mutableStateListOf<NailAnalysisResult>() }
     val imageCapture = remember { ImageCapture.Builder().build() }
 
     LaunchedEffect(flashEnabled) {
@@ -171,6 +176,66 @@ fun CameraScanScreen(
                     )
 
                     CameraOverlay(modifier = Modifier.fillMaxSize())
+
+                    // D2: Multi-finger sequential scan progress banner
+                    if (isMultiFingerMode) {
+                        val currentStep = fingerResults.size
+                        val nextFinger = fingerLabels.getOrElse(currentStep) { "완료" }
+                        Column(
+                            modifier = Modifier
+                                .align(Alignment.TopCenter)
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp, vertical = 12.dp)
+                                .background(Color.Black.copy(alpha = 0.78f), RoundedCornerShape(12.dp))
+                                .padding(12.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = "5손가락 정밀 스캔 (${currentStep}/5) • 다음: $nextFinger",
+                                    color = Color.White,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 13.sp
+                                )
+                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    if (currentStep >= 2) {
+                                        TextButton(
+                                            onClick = {
+                                                val agg = MultiFingerAggregator.aggregate(fingerResults.toList())
+                                                fingerResults.clear()
+                                                viewModel.saveResult(agg)
+                                                onAnalysisComplete(agg.id)
+                                            },
+                                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)
+                                        ) {
+                                            Text("지금 집계", color = NutriGreen, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                        }
+                                    }
+                                    if (currentStep > 0) {
+                                        TextButton(
+                                            onClick = { fingerResults.clear() },
+                                            contentPadding = PaddingValues(horizontal = 6.dp, vertical = 0.dp)
+                                        ) {
+                                            Text("초기화", color = Color.LightGray, fontSize = 12.sp)
+                                        }
+                                    }
+                                }
+                            }
+                            Spacer(modifier = Modifier.height(6.dp))
+                            LinearProgressIndicator(
+                                progress = { currentStep / 5f },
+                                color = NutriGreen,
+                                trackColor = Color.White.copy(alpha = 0.25f),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(6.dp)
+                                    .clip(RoundedCornerShape(3.dp))
+                            )
+                        }
+                    }
 
                     errorMessage?.let { error ->
                         Box(
@@ -248,7 +313,8 @@ fun CameraScanScreen(
                                                 "healthy",
                                                 viewModel,
                                                 coroutineScope,
-                                                onAnalysisComplete
+                                                onAnalysisComplete,
+                                                isMultiFingerMode = isMultiFingerMode
                                             )
                                         } else {
                                             if (!useGemma && !useOnDeviceVision && apiKey.isBlank()) {
@@ -304,8 +370,19 @@ fun CameraScanScreen(
                                                             )
                                                         }
                                                     }
-                                                    viewModel.saveResult(result)
-                                                    onAnalysisComplete(result.id)
+                                                    if (isMultiFingerMode) {
+                                                        fingerResults.add(result)
+                                                        analyzing = false
+                                                        if (fingerResults.size >= 5) {
+                                                            val aggregated = MultiFingerAggregator.aggregate(fingerResults.toList())
+                                                            fingerResults.clear()
+                                                            viewModel.saveResult(aggregated)
+                                                            onAnalysisComplete(aggregated.id)
+                                                        }
+                                                    } else {
+                                                        viewModel.saveResult(result)
+                                                        onAnalysisComplete(result.id)
+                                                    }
                                                 } catch (t: Throwable) {
                                                     t.printStackTrace()
                                                     errorMessage = t.message ?: "촬영 및 분석 중 오류 발생"
@@ -328,7 +405,30 @@ fun CameraScanScreen(
                                 }
                             }
 
-                            Box(modifier = Modifier.width(100.dp))
+                            // D2: Single-finger vs 5-finger scan mode toggle
+                            OutlinedButton(
+                                onClick = {
+                                    if (!analyzing) {
+                                        isMultiFingerMode = !isMultiFingerMode
+                                        fingerResults.clear()
+                                    }
+                                },
+                                colors = ButtonDefaults.outlinedButtonColors(
+                                    contentColor = if (isMultiFingerMode) NutriGreen else Color.White
+                                ),
+                                border = BorderStroke(
+                                    1.dp,
+                                    if (isMultiFingerMode) NutriGreen else Color.White.copy(alpha = 0.5f)
+                                ),
+                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+                                modifier = Modifier.width(100.dp)
+                            ) {
+                                Text(
+                                    text = if (isMultiFingerMode) "5손가락 ON" else "5손가락 모드",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                            }
                         }
                     }
 
@@ -347,7 +447,8 @@ fun CameraScanScreen(
                                         condition,
                                         viewModel,
                                         coroutineScope,
-                                        onAnalysisComplete
+                                        onAnalysisComplete,
+                                        isMultiFingerMode = isMultiFingerMode
                                     )
                                 }
                             }
@@ -430,10 +531,18 @@ private fun triggerMockAnalysis(
     condition: String,
     viewModel: MainViewModel,
     coroutineScope: CoroutineScope,
-    onAnalysisComplete: (String) -> Unit
+    onAnalysisComplete: (String) -> Unit,
+    isMultiFingerMode: Boolean = false
 ) {
     coroutineScope.launch {
-        val result = NailClassifier.buildResultForCondition(condition, "demo_$condition")
+        val result = if (isMultiFingerMode) {
+            val samples = (1..5).map { idx ->
+                NailClassifier.buildResultForCondition(condition, "demo_${condition}_finger_$idx")
+            }
+            MultiFingerAggregator.aggregate(samples)
+        } else {
+            NailClassifier.buildResultForCondition(condition, "demo_$condition")
+        }
         viewModel.saveResult(result)
         onAnalysisComplete(result.id)
     }
